@@ -10,7 +10,7 @@ API_TOKEN = "8561540975:AAELrKmHB4vcMe8Txnbp4F47jxqJhxfq3u8"
 CHANNEL_USERNAME = "@CouresbyAnkit"
 CHANNEL_LINK = "https://t.me/CouresbyAnkit"
 
-ADMIN_IDS = [6003630443, 7197718325]  # 👈 PUT YOUR TELEGRAM USER ID HERE
+ADMIN_IDS = [6003630443, 7197718325]
 COURSES_FILE = "courses.json"
 
 bot = telebot.TeleBot(API_TOKEN, parse_mode="Markdown")
@@ -29,7 +29,7 @@ def save_courses(data):
 
 COURSES = load_courses()
 
-# ================= FORCE JOIN =================
+# ================= FORCE JOIN CHECK =================
 def is_member(user_id):
     try:
         member = bot.get_chat_member(CHANNEL_USERNAME, user_id)
@@ -37,23 +37,20 @@ def is_member(user_id):
     except:
         return False
 
-# ================= DAILY SEARCH LOG =================
+# ================= LOG SEARCH =================
 def log_search(user, text):
     today = datetime.now().strftime("%Y-%m-%d")
     file = f"stats_{today}.json"
-
     data = []
     if os.path.exists(file):
         with open(file, "r") as f:
             data = json.load(f)
-
     data.append({
         "user": user.first_name,
         "username": user.username,
         "query": text,
         "time": datetime.now().strftime("%H:%M:%S")
     })
-
     with open(file, "w") as f:
         json.dump(data, f, indent=2)
 
@@ -76,10 +73,10 @@ def start(message):
     bot.send_message(
         message.chat.id,
         f"🎉 *Welcome {message.from_user.first_name}!*\n\n"
-        "📚 Use /courses or 🔍 search by typing"
+        "📚 Use /courses or type a search query"
     )
 
-# ================= CHECK JOIN =================
+# ================= CHECK JOIN CALLBACK =================
 @bot.callback_query_handler(func=lambda call: call.data == "check_join")
 def check_join(call):
     if is_member(call.from_user.id):
@@ -91,24 +88,17 @@ def check_join(call):
     else:
         bot.answer_callback_query(call.id, "❌ Join channel first!", show_alert=True)
 
-# ================= COURSES (INLINE) =================
+# ================= COURSES INLINE =================
 @bot.message_handler(commands=["courses"])
 def show_courses(message):
     if not is_member(message.from_user.id):
-        bot.reply_to(
-            message,
-            f"🔐 Join {CHANNEL_USERNAME} to access courses."
-        )
+        bot.reply_to(message, f"🔐 Join {CHANNEL_USERNAME} to access courses.")
         return
 
     markup = types.InlineKeyboardMarkup(row_width=1)
     for course in COURSES:
-        markup.add(
-            types.InlineKeyboardButton(
-                f"🎓 {course['name']}",
-                callback_data=f"course_{course['name'].lower().replace(' ', '_')}"
-            )
-        )
+        callback_data = f"course_{course['name'].lower().replace(' ', '_')}"
+        markup.add(types.InlineKeyboardButton(f"🎓 {course['name']}", callback_data=callback_data))
 
     bot.send_message(
         message.chat.id,
@@ -116,11 +106,10 @@ def show_courses(message):
         reply_markup=markup
     )
 
-# ================= COURSE BUTTON =================
+# ================= COURSE BUTTON CALLBACK =================
 @bot.callback_query_handler(func=lambda call: call.data.startswith("course_"))
 def course_selected(call):
     course_key = call.data.replace("course_", "")
-
     for course in COURSES:
         if course_key == course["name"].lower().replace(" ", "_"):
             bot.send_message(
@@ -129,10 +118,9 @@ def course_selected(call):
             )
             bot.answer_callback_query(call.id)
             return
-
     bot.answer_callback_query(call.id, "❌ Course not found")
 
-# ================= SEARCH (MOVIE STYLE) =================
+# ================= SEARCH =================
 @bot.message_handler(func=lambda m: m.text and not m.text.startswith("/"))
 def search(message):
     if not is_member(message.from_user.id):
@@ -170,12 +158,7 @@ def admin(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("➕ Add Course", "➖ Remove Course")
     markup.add("❌ Exit Admin")
-
-    bot.send_message(
-        message.chat.id,
-        "👮 *Admin Panel*",
-        reply_markup=markup
-    )
+    bot.send_message(message.chat.id, "👮 *Admin Panel*", reply_markup=markup)
 
 @bot.message_handler(func=lambda m: m.text == "➕ Add Course")
 def add_course(message):
@@ -202,6 +185,6 @@ def delete_course(message):
     save_courses(COURSES)
     bot.send_message(message.chat.id, "🗑️ Course removed (if existed).")
 
-# ================= RUN =================
+# ================= RUN BOT =================
 print("🤖 Bot running...")
 bot.infinity_polling()
