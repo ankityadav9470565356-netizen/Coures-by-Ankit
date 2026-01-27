@@ -11,7 +11,6 @@ CHANNEL_USERNAME = "@CouresbyAnkit"
 CHANNEL_LINK = "https://t.me/CouresbyAnkit"
 
 ADMIN_IDS = [6003630443, 7197718325]  # 👈 PUT YOUR TELEGRAM USER ID HERE
-
 COURSES_FILE = "courses.json"
 
 bot = telebot.TeleBot(API_TOKEN, parse_mode="Markdown")
@@ -69,8 +68,7 @@ def start(message):
         )
         bot.send_message(
             message.chat.id,
-            "🔐 *Restricted Access*\n\n"
-            "Join our channel to use this bot 👇",
+            "🔐 *Restricted Access*\n\nJoin our channel to use this bot 👇",
             reply_markup=markup
         )
         return
@@ -95,16 +93,20 @@ def check_join(call):
 
 # ================= COURSES (INLINE) =================
 @bot.message_handler(commands=["courses"])
-def courses(message):
+def show_courses(message):
     if not is_member(message.from_user.id):
+        bot.reply_to(
+            message,
+            f"🔐 Join {CHANNEL_USERNAME} to access courses."
+        )
         return
 
     markup = types.InlineKeyboardMarkup(row_width=1)
-    for c in COURSES:
+    for course in COURSES:
         markup.add(
             types.InlineKeyboardButton(
-                f"🎓 {c['name']}",
-                callback_data=f"course_{c['name']}"
+                f"🎓 {course['name']}",
+                callback_data=f"course_{course['name'].lower().replace(' ', '_')}"
             )
         )
 
@@ -116,16 +118,19 @@ def courses(message):
 
 # ================= COURSE BUTTON =================
 @bot.callback_query_handler(func=lambda call: call.data.startswith("course_"))
-def course_open(call):
-    name = call.data.replace("course_", "")
-    for c in COURSES:
-        if c["name"] == name:
+def course_selected(call):
+    course_key = call.data.replace("course_", "")
+
+    for course in COURSES:
+        if course_key == course["name"].lower().replace(" ", "_"):
             bot.send_message(
                 call.message.chat.id,
-                f"🎬 *{name}*\n\n📎 {c['link']}"
+                f"🎓 *{course['name']}*\n\n📎 Access here:\n{course['link']}"
             )
+            bot.answer_callback_query(call.id)
             return
-    bot.answer_callback_query(call.id)
+
+    bot.answer_callback_query(call.id, "❌ Course not found")
 
 # ================= SEARCH (MOVIE STYLE) =================
 @bot.message_handler(func=lambda m: m.text and not m.text.startswith("/"))
@@ -137,26 +142,21 @@ def search(message):
     log_search(message.from_user, query)
 
     msg = bot.send_message(message.chat.id, "🔍 Searching 🎬")
-    time.sleep(0.5)
-    bot.edit_message_text("🔍 Searching 🎬.", message.chat.id, msg.message_id)
-    time.sleep(0.5)
-    bot.edit_message_text("🔍 Searching 🎬..", message.chat.id, msg.message_id)
-    time.sleep(0.5)
-    bot.edit_message_text("🔍 Searching 🎬...", message.chat.id, msg.message_id)
+    for i in range(3):
+        time.sleep(0.5)
+        bot.edit_message_text(f"🔍 Searching 🎬{'.' * (i+1)}", message.chat.id, msg.message_id)
 
-    for c in COURSES:
-        if query in c["name"].lower():
+    for course in COURSES:
+        if query in course["name"].lower():
             bot.edit_message_text(
-                f"🎉 *Found!*\n\n🎓 {c['name']}\n📎 {c['link']}",
+                f"🎉 *Found!*\n\n🎓 {course['name']}\n📎 {course['link']}",
                 message.chat.id,
                 msg.message_id
             )
             return
 
     bot.edit_message_text(
-        "😔 *Not Available*\n\n"
-        "🚧 This course is coming soon!\n"
-        "📩 DM 👉 @coursesbyankit",
+        "😔 *Not Available*\n\n🚧 This course is coming soon!\n📩 DM 👉 @coursesbyankit",
         message.chat.id,
         msg.message_id
     )
@@ -205,5 +205,3 @@ def delete_course(message):
 # ================= RUN =================
 print("🤖 Bot running...")
 bot.infinity_polling()
-
-
