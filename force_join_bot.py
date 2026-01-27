@@ -10,7 +10,7 @@ API_TOKEN = "8561540975:AAELrKmHB4vcMe8Txnbp4F47jxqJhxfq3u8"
 CHANNEL_USERNAME = "@CouresbyAnkit"
 CHANNEL_LINK = "https://t.me/CouresbyAnkit"
 
-ADMIN_IDS = [6003630443, 7197718325]
+ADMIN_IDS = [6003630443, 7197718325]  # 👈 Put your Telegram ID
 COURSES_FILE = "courses.json"
 
 bot = telebot.TeleBot(API_TOKEN, parse_mode="Markdown")
@@ -28,6 +28,14 @@ def save_courses(data):
         json.dump(data, f, indent=2)
 
 COURSES = load_courses()
+
+# ====== Add a test course if list is empty ======
+if not COURSES:
+    COURSES.append({
+        "name": "Python Basics",
+        "link": "https://t.me/test"
+    })
+    save_courses(COURSES)
 
 # ================= FORCE JOIN CHECK =================
 def is_member(user_id):
@@ -124,6 +132,7 @@ def course_selected(call):
 @bot.message_handler(func=lambda m: m.text and not m.text.startswith("/"))
 def search(message):
     if not is_member(message.from_user.id):
+        bot.reply_to(message, f"🔐 Join {CHANNEL_USERNAME} to search courses.")
         return
 
     query = message.text.lower()
