@@ -7,10 +7,10 @@ from datetime import datetime
 
 # ================= CONFIG =================
 API_TOKEN = "8561540975:AAELrKmHB4vcMe8Txnbp4F47jxqJhxfq3u8"
-CHANNEL_USERNAME = "6003630443, 7197718325"
+CHANNEL_USERNAME = "@CouresbyAnkit"
 CHANNEL_LINK = "https://t.me/CouresbyAnkit"
 
-ADMIN_IDS = [@ytmn20]  # 👈 PUT YOUR TELEGRAM USER ID HERE
+ADMIN_IDS = [6003630443, 7197718325]  # 👈 PUT YOUR TELEGRAM USER ID HERE
 
 COURSES_FILE = "courses.json"
 
@@ -205,4 +205,5 @@ def delete_course(message):
 # ================= RUN =================
 print("🤖 Bot running...")
 bot.infinity_polling()
+
 
