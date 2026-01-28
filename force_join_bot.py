@@ -1,24 +1,9 @@
 import telebot
 from telebot import types
 import json, os, time
+import difflib
 from datetime import datetime
 from collections import Counter
-
-
-
-COMING_SOON_FILE = "coming_soon.json"
-
-def load_coming():
-    if not os.path.exists(COMING_SOON_FILE):
-        with open(COMING_SOON_FILE, "w") as f:
-            json.dump([], f)
-    with open(COMING_SOON_FILE, "r") as f:
-        return json.load(f)
-
-def save_coming(data):
-    with open(COMING_SOON_FILE, "w") as f:
-        json.dump(data, f, indent=2)
-
 
 # ================= CONFIG =================
 API_TOKEN = "8561540975:AAELrKmHB4vcMe8Txnbp4F47jxqJhxfq3u8"
@@ -27,22 +12,19 @@ CHANNEL_LINK = "https://t.me/CouresbyAnkit"
 
 ADMIN_IDS = [6003630443, 7197718325]
 COURSES_FILE = "courses.json"
+COMING_SOON_FILE = "coming_soon.json"
 
 bot = telebot.TeleBot(API_TOKEN, parse_mode="Markdown")
 
-# ================= DATA =================
-ADMIN_STATE = {}
-
-DEFAULT_COURSES = [
-    {"name": "Edit To Earn – Video Editing", "link": "https://t.me/EditToEarnCoursesbyAnkit"},
-    {"name": "CapCut Mastery Course", "link": "https://t.me/CouresbyAnkit/447"},
-]
-
-# ================= LOAD / SAVE =================
+# ================= DATA LOADERS =================
 def load_courses():
     if not os.path.exists(COURSES_FILE):
+        default = [
+            {"name": "Edit To Earn – Video Editing", "link": "https://t.me/EditToEarnCoursesbyAnkit"},
+            {"name": "CapCut Mastery Course", "link": "https://t.me/CouresbyAnkit/447"},
+        ]
         with open(COURSES_FILE, "w") as f:
-            json.dump(DEFAULT_COURSES, f, indent=2)
+            json.dump(default, f, indent=2)
     with open(COURSES_FILE) as f:
         return json.load(f)
 
@@ -50,24 +32,33 @@ def save_courses(data):
     with open(COURSES_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
+def load_coming():
+    if not os.path.exists(COMING_SOON_FILE):
+        with open(COMING_SOON_FILE, "w") as f:
+            json.dump([], f)
+    with open(COMING_SOON_FILE, "r") as f:
+        return json.load(f)
+
 COURSES = load_courses()
+ADMIN_STATE = {}
 
-def get_today_stats():
-    today = datetime.now().strftime("%Y-%m-%d")
-    file = f"stats_{today}.json"
+# ================= HELPERS =================
+def get_suggestions(query):
+    # Dynamically get names from your current COURSES list + extra hardcoded ones
+    all_names = [c["name"] for c in COURSES]
+    extra_names = [
+        "Dhruv Rathee — YouTube Blueprint",
+        "Saqlain Khan — Documentary Script",
+        "Tharun Speaks — Video Editing",
+        "Algrow — YouTube Course",
+        "BeerBiceps — Video Editing",
+        "Master AI Prompting — Tech Burner",
+        "Dark Psychology — Aditya Raj Kashyap",
+        "Edit To Earn Cohort"
+    ]
+    full_list = list(set(all_names + extra_names))
+    return difflib.get_close_matches(query, full_list, n=3, cutoff=0.4)
 
-    if not os.path.exists(file):
-        return 0, {}
-
-    with open(file, "r") as f:
-        data = json.load(f)
-
-    queries = [item["query"] for item in data]
-    counter = Counter(queries)
-
-    return len(queries), counter
-
-# ================= FORCE JOIN =================
 def is_member(user_id):
     try:
         status = bot.get_chat_member(CHANNEL_USERNAME, user_id).status
@@ -75,22 +66,24 @@ def is_member(user_id):
     except:
         return False
 
-# ================= STATS =================
-def log_search(user, query):
+def log_search(query):
     today = datetime.now().strftime("%Y-%m-%d")
     file = f"stats_{today}.json"
     data = []
     if os.path.exists(file):
-        data = json.load(open(file))
+        with open(file, "r") as f:
+            data = json.load(f)
     data.append({"query": query})
-    json.dump(data, open(file, "w"), indent=2)
+    with open(file, "w") as f:
+        json.dump(data, f, indent=2)
 
 def get_today_stats():
     today = datetime.now().strftime("%Y-%m-%d")
     file = f"stats_{today}.json"
     if not os.path.exists(file):
         return 0, {}
-    data = json.load(open(file))
+    with open(file, "r") as f:
+        data = json.load(f)
     counter = Counter([d["query"] for d in data])
     return len(data), counter
 
@@ -105,138 +98,143 @@ def start(message):
         )
         bot.send_message(
             message.chat.id,
-            "🔐 *Restricted Access*\n\nJoin our channel first 👇",
+            "🔐 *Restricted Access*\n\nJoin our channel first to use this bot! 👇",
             reply_markup=markup
         )
         return
 
     bot.send_message(
         message.chat.id,
-        "📚 *Welcome!*\n\nUse /courses or type course name 🔍"
+        "📚 *Welcome to Ankit's Vault!*\n\nUse /courses to see everything or simply *type a course name* to search. 🔍"
     )
 
-# ================= COURSES =================
+@bot.callback_query_handler(func=lambda c: c.data == "check_join")
+def check_join_callback(c):
+    if is_member(c.from_user.id):
+        bot.answer_callback_query(c.id, "✅ Access Granted!")
+        start(c.message)
+    else:
+        bot.answer_callback_query(c.id, "❌ You haven't joined yet!", show_alert=True)
+
+# ================= COURSES COMMAND =================
 @bot.message_handler(commands=["courses"])
-def courses(message):
+def show_courses(message):
+    if not is_member(message.from_user.id): return
     markup = types.InlineKeyboardMarkup(row_width=1)
     for c in COURSES:
-        key = c["name"].lower().replace(" ", "_")
+        key = c["name"].lower().replace(" ", "_")[:20] # Shorten key for callback limit
         markup.add(types.InlineKeyboardButton(f"🎓 {c['name']}", callback_data=f"course_{key}"))
 
-    bot.send_message(
-        message.chat.id,
-        "📚 *Available Courses*\n\n👇 Select a course:",
-        reply_markup=markup
-    )
+    bot.send_message(message.chat.id, "📚 *Available Courses*:", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("course_"))
 def course_open(c):
     key = c.data.replace("course_", "")
     for course in COURSES:
-        if key == course["name"].lower().replace(" ", "_"):
-            bot.send_message(
-                c.message.chat.id,
-                f"🎉 *{course['name']}*\n🔗 {course['link']}"
-            )
+        if key == course["name"].lower().replace(" ", "_")[:20]:
+            bot.send_message(c.message.chat.id, f"🎉 *{course['name']}*\n🔗 {course['link']}")
             return
-    bot.answer_callback_query(c.id, "❌ Course not found")
+    bot.answer_callback_query(c.id, "❌ Course link not found")
 
-# ================= SEARCH (NON-ADMIN ONLY) =================
-# ================= SEARCH (NON-ADMIN ONLY) =================
-suggestions = get_suggestions(query)
-
-if suggestions:
-    # Create an interactive keyboard for suggestions
-    markup = telebot.types.InlineKeyboardMarkup()
+# ================= SEARCH LOGIC =================
+@bot.message_handler(func=lambda m: m.from_user.id not in ADMIN_IDS and not m.text.startswith("/"))
+def handle_search(m):
+    if not is_member(m.from_user.id): return
     
-    for s in suggestions:
-        # Each button sends the course name back to the bot as a callback
-        markup.add(telebot.types.InlineKeyboardButton(text=f"🎓 {s}", callback_data=f"search_{s}"))
-
-    text = (
-        "🔍 *I couldn't find an exact match.*\n\n"
-        "Did you mean one of these? 👇"
-    )
-
-    bot.edit_message_text(
-        chat_id=m.chat.id,
-        message_id=msg.message_id,
-        text=text,
-        reply_markup=markup,
-        parse_mode="Markdown"
-    )
+    query = m.text.strip()
+    log_search(query)
     
+    # Check for exact match first
+    match = next((c for c in COURSES if query.lower() in c["name"].lower()), None)
+    
+    if match:
+        bot.send_message(m.chat.id, f"✅ *Match Found!*\n\n🎉 *{match['name']}*\n🔗 {match['link']}")
+    else:
+        # If no exact match, show suggestions
+        suggestions = get_suggestions(query)
+        if suggestions:
+            markup = types.InlineKeyboardMarkup()
+            for s in suggestions:
+                markup.add(types.InlineKeyboardButton(text=f"🎓 {s}", callback_data=f"suggest_{s[:20]}"))
+            
+            bot.send_message(
+                m.chat.id, 
+                "🔍 *I couldn't find that exact course.*\n\nDid you mean one of these? 👇",
+                reply_markup=markup
+            )
+        else:
+            bot.send_message(m.chat.id, "❌ *No results found.*\nTry checking your spelling or use /courses.")
 
+@bot.callback_query_handler(func=lambda c: c.data.startswith("suggest_"))
+def handle_suggestion(c):
+    suggestion_short = c.data.replace("suggest_", "")
+    # Search for the full name in our courses
+    match = next((course for course in COURSES if course["name"].lower().startswith(suggestion_short.lower())), None)
+    
+    if match:
+        bot.edit_message_text(f"🎉 *{match['name']}*\n🔗 {match['link']}", c.message.chat.id, c.message.message_id)
+    else:
+        bot.answer_callback_query(c.id, "Please type the name manually.")
 
 # ================= ADMIN PANEL =================
 @bot.message_handler(commands=["admin"])
 def admin_panel(message):
-    if message.from_user.id not in ADMIN_IDS:
-        return
-
+    if message.from_user.id not in ADMIN_IDS: return
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("➕ Add Course")
-    markup.add("➖ Remove Course")
-    markup.add("📊 View Stats")
-    markup.add("❌ Exit Admin")
+    markup.add("➕ Add Course", "➖ Remove Course")
+    markup.add("📊 View Stats", "❌ Exit Admin")
+    bot.send_message(message.chat.id, "👮 *Admin Panel Active*", reply_markup=markup)
 
-    bot.send_message(
-        message.chat.id,
-        "👮 *Admin Panel*",
-        reply_markup=markup
-    )
-
-# ================= ADMIN BUTTONS =================
-@bot.message_handler(func=lambda m: m.text == "➕ Add Course" and m.from_user.id in ADMIN_IDS)
-def add_course(m):
-    ADMIN_STATE[m.from_user.id] = "ADD"
-    bot.send_message(m.chat.id, "Send:\n`Course Name | Link`")
-
-@bot.message_handler(func=lambda m: m.text == "➖ Remove Course" and m.from_user.id in ADMIN_IDS)
-def remove_course(m):
-    ADMIN_STATE[m.from_user.id] = "REMOVE"
-    text = "Send exact course name to remove:\n\n"
-    for c in COURSES:
-        text += f"• {c['name']}\n"
-    bot.send_message(m.chat.id, text)
-
-@bot.message_handler(func=lambda m: m.text == "📊 View Stats" and m.from_user.id in ADMIN_IDS)
-def stats(m):
-    total, counter = get_today_stats()
-    text = f"📊 *Today Stats*\n\n🔍 Searches: {total}\n\n"
-    for k, v in counter.items():
-        text += f"• `{k}` → {v}\n"
-    bot.send_message(m.chat.id, text or "_No data_")
-
-@bot.message_handler(func=lambda m: m.text == "❌ Exit Admin" and m.from_user.id in ADMIN_IDS)
-def exit_admin(m):
-    ADMIN_STATE.pop(m.from_user.id, None)
-    bot.send_message(m.chat.id, "❌ Exited admin", reply_markup=types.ReplyKeyboardRemove())
-
-# ================= ADMIN INPUT HANDLER =================
 @bot.message_handler(func=lambda m: m.from_user.id in ADMIN_IDS)
 def admin_input(m):
+    if m.text == "❌ Exit Admin":
+        ADMIN_STATE.pop(m.from_user.id, None)
+        bot.send_message(m.chat.id, "❌ Exited admin", reply_markup=types.ReplyKeyboardRemove())
+        return
+
+    if m.text == "➕ Add Course":
+        ADMIN_STATE[m.from_user.id] = "ADD"
+        bot.send_message(m.chat.id, "Send in this format:\n`Course Name | Link`")
+        return
+
+    if m.text == "➖ Remove Course":
+        ADMIN_STATE[m.from_user.id] = "REMOVE"
+        text = "Type the exact name to remove:\n\n"
+        for c in COURSES: text += f"• `{c['name']}`\n"
+        bot.send_message(m.chat.id, text)
+        return
+
+    if m.text == "📊 View Stats":
+        total, counter = get_today_stats()
+        text = f"📊 *Today's Stats*\n\n🔍 Total Searches: {total}\n\n"
+        for k, v in counter.items(): text += f"• `{k}`: {v}\n"
+        bot.send_message(m.chat.id, text if total > 0 else "No searches today.")
+        return
+
+    # Handle Input based on State
     state = ADMIN_STATE.get(m.from_user.id)
-
     if state == "ADD" and "|" in m.text:
-        name, link = map(str.strip, m.text.split("|", 1))
-        COURSES.append({"name": name, "link": link})
-        save_courses(COURSES)
-        ADMIN_STATE[m.from_user.id] = None
-        bot.send_message(m.chat.id, "✅ Course added")
-
+        try:
+            name, link = map(str.strip, m.text.split("|", 1))
+            COURSES.append({"name": name, "link": link})
+            save_courses(COURSES)
+            ADMIN_STATE[m.from_user.id] = None
+            bot.send_message(m.chat.id, f"✅ Added: {name}")
+        except:
+            bot.send_message(m.chat.id, "❌ Format error. Use `Name | Link`")
+    
     elif state == "REMOVE":
-        before = len(COURSES)
-        COURSES[:] = [c for c in COURSES if c["name"].lower() != m.text.lower()]
-        save_courses(COURSES)
+        global COURSES
+        original_count = len(COURSES)
+        COURSES = [c for c in COURSES if c["name"].lower() != m.text.lower().strip()]
+        if len(COURSES) < original_count:
+            save_courses(COURSES)
+            bot.send_message(m.chat.id, "🗑️ Course removed successfully.")
+        else:
+            bot.send_message(m.chat.id, "❌ Name not found exactly.")
         ADMIN_STATE[m.from_user.id] = None
-        bot.send_message(
-            m.chat.id,
-            "🗑️ Removed" if len(COURSES) < before else "❌ Course not found"
-        )
 
 # ================= RUN =================
-print("🤖 Bot running...")
-bot.infinity_polling()
-
-
+if __name__ == "__main__":
+    print("🤖 Bot is starting...")
+    bot.infinity_polling()
