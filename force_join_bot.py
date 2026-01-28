@@ -260,13 +260,7 @@ def admin_stats_button(message):
         text += "_No searches today_"
 
     bot.send_message(message.chat.id, text)
-
-
-
-#Exit button 
-
-
-    @bot.message_handler(func=lambda m: m.from_user.id in ADMIN_IDS)
+@bot.message_handler(func=lambda m: m.from_user.id in ADMIN_IDS)
 def admin_text_handler(message):
     state = ADMIN_STATE.get(message.from_user.id)
 
@@ -293,4 +287,5 @@ def admin_text_handler(message):
 # ================= RUN =================
 print("🤖 Bot is running...")
 bot.infinity_polling()
+
 
