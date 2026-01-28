@@ -4,6 +4,22 @@ import json, os, time
 from datetime import datetime
 from collections import Counter
 
+
+
+COMING_SOON_FILE = "coming_soon.json"
+
+def load_coming():
+    if not os.path.exists(COMING_SOON_FILE):
+        with open(COMING_SOON_FILE, "w") as f:
+            json.dump([], f)
+    with open(COMING_SOON_FILE, "r") as f:
+        return json.load(f)
+
+def save_coming(data):
+    with open(COMING_SOON_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+
 # ================= CONFIG =================
 API_TOKEN = "8561540975:AAELrKmHB4vcMe8Txnbp4F47jxqJhxfq3u8"
 CHANNEL_USERNAME = "@CouresbyAnkit"
@@ -35,6 +51,21 @@ def save_courses(data):
         json.dump(data, f, indent=2)
 
 COURSES = load_courses()
+
+def get_today_stats():
+    today = datetime.now().strftime("%Y-%m-%d")
+    file = f"stats_{today}.json"
+
+    if not os.path.exists(file):
+        return 0, {}
+
+    with open(file, "r") as f:
+        data = json.load(f)
+
+    queries = [item["query"] for item in data]
+    counter = Counter(queries)
+
+    return len(queries), counter
 
 # ================= FORCE JOIN =================
 def is_member(user_id):
@@ -111,28 +142,16 @@ def course_open(c):
     bot.answer_callback_query(c.id, "❌ Course not found")
 
 # ================= SEARCH (NON-ADMIN ONLY) =================
-@bot.message_handler(func=lambda m: m.text and not m.text.startswith("/") and m.from_user.id not in ADMIN_IDS)
-def search(m):
-    query = m.text.lower()
-    log_search(m.from_user, query)
+suggestions = get_suggestions(query)
 
-    msg = bot.send_message(m.chat.id, "🔍 Searching 🎬")
-    time.sleep(0.6)
+if suggestions:
+    text = "🔎 *Did you mean:*\n\n"
+    for s in suggestions:
+        text += f"🎓 {s}\n"
 
-    for c in COURSES:
-        if query in c["name"].lower():
-            bot.edit_message_text(
-                f"🎉 *Found!*\n\n🎓 {c['name']}\n🔗 {c['link']}",
-                m.chat.id,
-                msg.message_id
-            )
-            return
+    bot.edit_message_text(text, m.chat.id, msg.message_id)
+    return
 
-    bot.edit_message_text(
-        "😔 *Course Not Available*\n\n🚧 Coming Soon!\n📩 DM 👉 @coursesbyankit",
-        m.chat.id,
-        msg.message_id
-    )
 
 # ================= ADMIN PANEL =================
 @bot.message_handler(commands=["admin"])
@@ -204,3 +223,4 @@ def admin_input(m):
 # ================= RUN =================
 print("🤖 Bot running...")
 bot.infinity_polling()
+
