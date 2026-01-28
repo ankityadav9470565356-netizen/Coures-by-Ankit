@@ -26,6 +26,8 @@ DEFAULT_COURSES = [
     {"name": "CapCut Mastery Course", "link": "https://t.me/CouresbyAnkit/447"},
     {"name": "Mr Beast Editor Course", "link": "https://t.me/AttractionDecodedManLifestyle/28"},
 ]
+ADMIN_STATE = {}
+
 
 # ================= LOAD / SAVE =================
 def load_courses():
@@ -179,21 +181,23 @@ def remove_course(m):
     bot.send_message(m.chat.id, text)
 
 
-#admin command
+#Admin Command 
 @bot.message_handler(commands=["admin"])
 def admin_panel(message):
     if message.from_user.id not in ADMIN_IDS:
-        bot.reply_to(message, "❌ Admin only")
         return
 
+    ADMIN_STATE[message.from_user.id] = None
+
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.row("➕ Add Course", "➖ Remove Course")
-    markup.row("📊 View Stats")
-    markup.row("❌ Exit Admin")
+    markup.add("➕ Add Course")
+    markup.add("➖ Remove Course")
+    markup.add("📊 View Stats")
+    markup.add("❌ Exit Admin")
 
     bot.send_message(
         message.chat.id,
-        "👮 *Admin Control Panel*",
+        "👮 *Admin Panel*\n\nSelect an option:",
         reply_markup=markup
     )
 
@@ -205,9 +209,6 @@ def admin_add_course(message):
         message.chat.id,
         "➕ *Add Course*\n\nSend like:\n`Course Name | https://link`"
     )
-
-
-# 
 @bot.message_handler(func=lambda m: "|" in m.text and m.from_user.id in ADMIN_IDS)
 def save_course(message):
     try:
@@ -231,9 +232,7 @@ def admin_remove_course(message):
         message.chat.id,
         "🗑 *Select course to delete*",
         reply_markup=markup
-    )
-
-# 
+    ) 
 @bot.message_handler(func=lambda m: m.text.startswith("🗑 ") and m.from_user.id in ADMIN_IDS)
 def delete_course(message):
     name = message.text.replace("🗑 ", "")
@@ -247,42 +246,51 @@ def delete_course(message):
 #Status button 
 
 @bot.message_handler(func=lambda m: m.text == "📊 View Stats" and m.from_user.id in ADMIN_IDS)
-def admin_stats(message):
-    today = datetime.now().strftime("%Y-%m-%d")
-    file = f"stats_{today}.json"
+def admin_stats_button(message):
+    total, counter = get_today_stats()
 
-    if not os.path.exists(file):
-        bot.send_message(message.chat.id, "📊 No searches today")
-        return
+    text = "📊 *Today Stats*\n\n"
+    text += f"🔍 Total Searches: *{total}*\n\n"
 
-    with open(file, "r") as f:
-        data = json.load(f)
-
-    total = len(data)
-    counter = {}
-    for d in data:
-        q = d["query"]
-        counter[q] = counter.get(q, 0) + 1
-
-    text = f"📊 *Today Stats*\n\n🔍 Searches: {total}\n\n"
-    for k, v in sorted(counter.items(), key=lambda x: x[1], reverse=True)[:5]:
-        text += f"• `{k}` → {v}\n"
+    if counter:
+        text += "🔥 *Top Searches:*\n"
+        for k, v in sorted(counter.items(), key=lambda x: x[1], reverse=True)[:5]:
+            text += f"• `{k}` → {v}\n"
+    else:
+        text += "_No searches today_"
 
     bot.send_message(message.chat.id, text)
 
 
+
 #Exit button 
 
-@bot.message_handler(func=lambda m: m.text == "❌ Exit Admin" and m.from_user.id in ADMIN_IDS)
-def exit_admin(message):
-    markup = types.ReplyKeyboardRemove()
-    bot.send_message(
-        message.chat.id,
-        "✅ Exited Admin Panel",
-        reply_markup=markup
-    )
+
+    @bot.message_handler(func=lambda m: m.from_user.id in ADMIN_IDS)
+def admin_text_handler(message):
+    state = ADMIN_STATE.get(message.from_user.id)
+
+    # ADD COURSE MODE
+    if state == "ADD" and "|" in message.text:
+        name, link = map(str.strip, message.text.split("|", 1))
+        COURSES.append({"name": name, "link": link})
+        save_courses(COURSES)
+        ADMIN_STATE[message.from_user.id] = None
+        bot.send_message(message.chat.id, "✅ Course added successfully!")
+        return
+
+    # REMOVE COURSE MODE
+    if state == "REMOVE":
+        global COURSES
+        COURSES = [c for c in COURSES if c["name"].lower() != message.text.lower()]
+        save_courses(COURSES)
+        ADMIN_STATE[message.from_user.id] = None
+        bot.send_message(message.chat.id, "🗑️ Course removed (if existed).")
+        return
+
 
 
 # ================= RUN =================
 print("🤖 Bot is running...")
 bot.infinity_polling()
+
