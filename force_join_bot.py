@@ -142,14 +142,29 @@ def course_open(c):
     bot.answer_callback_query(c.id, "❌ Course not found")
 
 # ================= SEARCH (NON-ADMIN ONLY) =================
+# ================= SEARCH (NON-ADMIN ONLY) =================
 suggestions = get_suggestions(query)
 
 if suggestions:
-    text = "🔎 *Did you mean:*\n\n"
+    # Create an interactive keyboard for suggestions
+    markup = telebot.types.InlineKeyboardMarkup()
+    
     for s in suggestions:
-        text += f"🎓 {s}\n"
+        # Each button sends the course name back to the bot as a callback
+        markup.add(telebot.types.InlineKeyboardButton(text=f"🎓 {s}", callback_data=f"search_{s}"))
 
-    bot.edit_message_text(text, m.chat.id, msg.message_id)
+    text = (
+        "🔍 *I couldn't find an exact match.*\n\n"
+        "Did you mean one of these? 👇"
+    )
+
+    bot.edit_message_text(
+        chat_id=m.chat.id,
+        message_id=msg.message_id,
+        text=text,
+        reply_markup=markup,
+        parse_mode="Markdown"
+    )
     return
 
 
