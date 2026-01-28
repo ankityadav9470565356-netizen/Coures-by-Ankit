@@ -165,7 +165,7 @@ if suggestions:
         reply_markup=markup,
         parse_mode="Markdown"
     )
-    return
+    
 
 
 # ================= ADMIN PANEL =================
@@ -238,4 +238,5 @@ def admin_input(m):
 # ================= RUN =================
 print("🤖 Bot running...")
 bot.infinity_polling()
+
 
