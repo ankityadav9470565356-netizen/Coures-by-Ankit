@@ -6,14 +6,13 @@ from datetime import datetime
 from collections import Counter
 
 # ================= CONFIG =================
-# ⚠️ Note: In a real production environment, use Environment Variables for the Token
 API_TOKEN = "8561540975:AAELrKmHB4vcMe8Txnbp4F47jxqJhxfq3u8"
 CHANNEL_USERNAME = "@CouresbyAnkit"
 CHANNEL_LINK = "https://t.me/CouresbyAnkit"
 
 ADMIN_IDS = [6003630443, 7197718325]
 COURSES_FILE = "courses.json"
-USERS_FILE = "users.json" # Added to track users for Broadcast
+USERS_FILE = "users.json"
 
 bot = telebot.TeleBot(API_TOKEN, parse_mode="Markdown")
 
@@ -83,7 +82,7 @@ def get_today_stats():
     with open(file, "r") as f: data = json.load(f)
     return len(data), Counter([d["query"] for d in data])
 
-# ================= START =================
+# ================= HANDLERS =================
 @bot.message_handler(commands=["start"])
 def start(message):
     save_user(message.from_user.id)
@@ -105,7 +104,6 @@ def check_join_callback(c):
     else:
         bot.answer_callback_query(c.id, "❌ You haven't joined yet!", show_alert=True)
 
-# ================= COURSES =================
 @bot.message_handler(commands=["courses"])
 def show_courses(message):
     if not is_member(message.from_user.id): return
@@ -124,7 +122,6 @@ def course_open(c):
             return
     bot.answer_callback_query(c.id, "❌ Course link not found")
 
-# ================= SEARCH LOGIC =================
 @bot.message_handler(func=lambda m: m.from_user.id not in ADMIN_IDS and not m.text.startswith("/"))
 def handle_search(m):
     if not is_member(m.from_user.id): return
@@ -162,6 +159,8 @@ def admin_panel(message):
 
 @bot.message_handler(func=lambda m: m.from_user.id in ADMIN_IDS)
 def admin_input(m):
+    global COURSES # Moved to the top of the function to avoid SyntaxError
+    
     if m.text == "❌ Exit Admin":
         ADMIN_STATE.pop(m.from_user.id, None)
         bot.send_message(m.chat.id, "❌ Exited", reply_markup=types.ReplyKeyboardRemove())
@@ -187,23 +186,29 @@ def admin_input(m):
 
     state = ADMIN_STATE.get(m.from_user.id)
     if state == "ADD" and "|" in m.text:
-        name, link = map(str.strip, m.text.split("|", 1))
-        COURSES.append({"name": name, "link": link})
-        save_courses(COURSES)
-        bot.send_message(m.chat.id, "✅ Added")
-        ADMIN_STATE[m.from_user.id] = None
+        try:
+            name, link = map(str.strip, m.text.split("|", 1))
+            COURSES.append({"name": name, "link": link})
+            save_courses(COURSES)
+            bot.send_message(m.chat.id, "✅ Added")
+            ADMIN_STATE[m.from_user.id] = None
+        except:
+            bot.send_message(m.chat.id, "❌ Format error.")
     elif state == "REMOVE":
-        global COURSES
+        original_count = len(COURSES)
         COURSES = [c for c in COURSES if c["name"].lower() != m.text.lower().strip()]
-        save_courses(COURSES)
-        bot.send_message(m.chat.id, "🗑️ Removed")
+        if len(COURSES) < original_count:
+            save_courses(COURSES)
+            bot.send_message(m.chat.id, "🗑️ Removed")
+        else:
+            bot.send_message(m.chat.id, "❌ Name not found.")
         ADMIN_STATE[m.from_user.id] = None
     elif state == "BC":
         users = load_users()
         count = 0
         for uid in users:
             try:
-                bot.send_message(uid, f"📢 *Important Announcement*\n\n{m.text}")
+                bot.send_message(uid, f"📢 *Announcement*\n\n{m.text}")
                 count += 1
             except: pass
         bot.send_message(m.chat.id, f"✅ Sent to {count} users.")
@@ -211,5 +216,4 @@ def admin_input(m):
 
 # ================= RUN =================
 if __name__ == "__main__":
-    print("🤖 Bot is starting...")
     bot.infinity_polling()
