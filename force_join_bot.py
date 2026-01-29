@@ -1,6 +1,8 @@
 import telebot
 from telebot import types
 import json, os, time, difflib
+from datetime import datetime
+from collections import Counter
 
 # ================= CONFIG =================
 API_TOKEN = "8561540975:AAEt3BAw87kFqIE8uLXRQpwTBRE9umdtTYs"
@@ -11,7 +13,6 @@ ADMIN_IDS = [6003630443, 7197718325]
 COURSES_FILE = "courses.json"
 
 bot = telebot.TeleBot(API_TOKEN, parse_mode="Markdown")
-ADMIN_STATE = {} 
 
 # ================= DATA LOADERS =================
 def load_json(file, default):
@@ -22,6 +23,7 @@ def load_json(file, default):
 def save_json(file, data):
     with open(file, "w") as f: json.dump(data, f, indent=2)
 
+# RE-ADDING ALL YOUR COURSES
 INITIAL_COURSES = [
     {"name": "🎬 EDIT TO EARN – Video Editing", "link": "https://t.me/EditToEarnCoursesbyAnkit"},
     {"name": "🔥 Jeet Selal Training Course", "link": "https://arolinks.com/TrainingCoursebyJeetSelal"},
@@ -50,99 +52,82 @@ def main_menu():
     markup.add(types.KeyboardButton('⭐ VIP Access'), types.KeyboardButton('📞 Support'))
     return markup
 
-def admin_menu():
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("➕ Add Course", "➖ Delete Course")
-    markup.add("📢 Broadcast", "❌ Exit Admin")
-    return markup
-
 def is_member(user_id):
     try:
         status = bot.get_chat_member(CHANNEL_USERNAME, user_id).status
         return status in ["member", "administrator", "creator"]
     except: return False
 
-# ================= HANDLERS =================
-@bot.message_handler(commands=["admin"])
-def admin_panel(message):
-    if message.from_user.id not in ADMIN_IDS: return
-    bot.send_message(message.chat.id, "👮 *Admin Panel Active*", reply_markup=admin_menu())
-
-@bot.message_handler(func=lambda m: m.from_user.id in ADMIN_IDS and m.text in ["➕ Add Course", "➖ Delete Course", "📢 Broadcast", "❌ Exit Admin"])
-def admin_button_handler(m):
-    if m.text == "❌ Exit Admin":
-        ADMIN_STATE.pop(m.from_user.id, None)
-        bot.send_message(m.chat.id, "Admin Closed.", reply_markup=main_menu())
-    elif m.text == "➕ Add Course":
-        ADMIN_STATE[m.from_user.id] = "ADD_NAME"
-        bot.send_message(m.chat.id, "Enter the Course Name:")
-    elif m.text == "➖ Delete Course":
-        ADMIN_STATE[m.from_user.id] = "DELETE"
-        bot.send_message(m.chat.id, "Enter EXACT name to delete:")
-    elif m.text == "📢 Broadcast":
-        ADMIN_STATE[m.from_user.id] = "BC"
-        bot.send_message(m.chat.id, "Enter broadcast message:")
-
+# ================= USER HANDLERS =================
 @bot.message_handler(commands=["start"])
 def start(message):
     if not is_member(message.from_user.id):
-        markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("🔔 Join Channel", url=CHANNEL_LINK))
-        bot.send_message(message.chat.id, "🔐 *Access Restricted*", reply_markup=markup)
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("🔔 Join Channel", url=CHANNEL_LINK))
+        bot.send_message(message.chat.id, "🔐 *Access Restricted*\nPlease join our channel to use the bot.", reply_markup=markup)
         return
-    bot.send_message(message.chat.id, "📚 *Welcome!*", reply_markup=main_menu())
+    bot.send_message(message.chat.id, "📚 *Welcome to Ankit's Vault!*", reply_markup=main_menu())
 
-@bot.message_handler(func=lambda m: m.text in ['📚 All Courses', '🔎 Search Course', '📞 Support'])
-def menu_buttons(m):
+@bot.message_handler(func=lambda m: m.text in ['📚 All Courses', '🔎 Search Course', '⭐ VIP Access', '📞 Support'])
+def handle_menu_buttons(m):
     if not is_member(m.from_user.id): return
+    
     if m.text == '📚 All Courses':
         markup = types.InlineKeyboardMarkup(row_width=1)
-        for i, c in enumerate(COURSES):
+        for i, c in enumerate(COURSES[:20]): # Show all 16+ courses
             markup.add(types.InlineKeyboardButton(text=f"🎓 {c['name']}", callback_data=f"get_c_{i}"))
-        bot.send_message(m.chat.id, "📜 *Courses:*", reply_markup=markup)
+        bot.send_message(m.chat.id, "📜 *Available Courses:*", reply_markup=markup)
+        
     elif m.text == '🔎 Search Course':
-        bot.send_message(m.chat.id, "🔍 Send the name.")
+        bot.send_message(m.chat.id, "🔍 **Ready!** Send the course name you're looking for.")
+        
     elif m.text == '📞 Support':
-        bot.send_message(m.chat.id, "Contact @CoursesByAnkit")
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("💬 Message Ankit", url="https://t.me/CoursesByAnkit"))
+        bot.send_message(m.chat.id, "📞 **Support Hub**\nClick below to chat with me!", reply_markup=markup)
 
 @bot.message_handler(func=lambda m: not m.text.startswith("/"))
-def main_handler(m):
-    global COURSES # MOVED TO THE TOP TO FIX SYNTAX ERROR
+def handle_search(m):
     if not is_member(m.from_user.id): return
-    
-    state = ADMIN_STATE.get(m.from_user.id)
-    
-    if m.from_user.id in ADMIN_IDS and state:
-        if state == "ADD_NAME":
-            ADMIN_STATE[m.from_user.id] = {"name": m.text, "step": "ADD_LINK"}
-            bot.send_message(m.chat.id, "Enter the link:")
-        elif isinstance(state, dict) and state.get("step") == "ADD_LINK":
-            COURSES.append({"name": state["name"], "link": m.text})
-            save_json(COURSES_FILE, COURSES)
-            bot.send_message(m.chat.id, "✅ Added!", reply_markup=admin_menu())
-            ADMIN_STATE.pop(m.from_user.id)
-        elif state == "DELETE":
-            COURSES = [c for c in COURSES if c["name"].lower() != m.text.lower().strip()]
-            save_json(COURSES_FILE, COURSES)
-            bot.send_message(m.chat.id, "🗑️ Deleted.", reply_markup=admin_menu())
-            ADMIN_STATE.pop(m.from_user.id)
-        return
-
-    # SEARCH LOGIC
     query = m.text.strip()
+    
+    # Notify Admin of Search
+    for admin_id in ADMIN_IDS:
+        try: bot.send_message(admin_id, f"🔎 *Search:* `{query}` by {m.from_user.first_name}")
+        except: pass
+
+    bot.send_chat_action(m.chat.id, 'typing')
+    status_msg = bot.send_message(m.chat.id, "🎬 *Searching...*")
+    time.sleep(0.8)
+
     match = next((c for c in COURSES if query.lower() in c["name"].lower()), None)
+    
     if match:
+        bot.delete_message(m.chat.id, status_msg.message_id)
         bot.send_message(m.chat.id, f"✅ *Found!*\n\n🎉 *{match['name']}*\n🔗 {match['link']}")
     else:
-        markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("📩 Request", callback_data=f"req_{query[:20]}"))
-        bot.send_message(m.chat.id, f"❌ Not found: `{query}`", reply_markup=markup)
+        all_names = [c["name"] for c in COURSES]
+        suggestions = difflib.get_close_matches(query, all_names, n=2, cutoff=0.3)
+        markup = types.InlineKeyboardMarkup()
+        if suggestions:
+            for s in suggestions:
+                idx = next((i for i, c in enumerate(COURSES) if c["name"] == s), None)
+                markup.add(types.InlineKeyboardButton(text=f"🎓 {s}", callback_data=f"get_c_{idx}"))
+        
+        markup.add(types.InlineKeyboardButton("📩 Request Course", callback_data=f"req_{query[:20]}"))
+        bot.edit_message_text(f"🚧 *Not Found!*\n\nI couldn't find `{query}`. Request it below?", m.chat.id, status_msg.message_id, reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda c: True)
-def callbacks(c):
+def handle_callbacks(c):
     if c.data.startswith("get_c_"):
         idx = int(c.data.replace("get_c_", ""))
-        bot.send_message(c.message.chat.id, f"🎉 *{COURSES[idx]['name']}*\n🔗 {COURSES[idx]['link']}")
+        match = COURSES[idx]
+        bot.send_message(c.message.chat.id, f"🎉 *{match['name']}*\n🔗 {match['link']}")
+        bot.answer_callback_query(c.id)
     elif c.data.startswith("req_"):
         bot.answer_callback_query(c.id, "✅ Request sent!")
+        for admin_id in ADMIN_IDS:
+            bot.send_message(admin_id, f"🚨 *REQUEST:* `{c.data.replace('req_', '')}` from {c.from_user.first_name}")
 
 if __name__ == "__main__":
     bot.infinity_polling()
