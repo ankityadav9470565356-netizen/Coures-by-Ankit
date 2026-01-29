@@ -129,5 +129,69 @@ def handle_callbacks(c):
         for admin_id in ADMIN_IDS:
             bot.send_message(admin_id, f"🚨 *REQUEST:* `{c.data.replace('req_', '')}` from {c.from_user.first_name}")
 
+# ================= ADMIN PANEL =================
+@bot.message_handler(commands=["admin"])
+def admin_panel(message):
+    if message.from_user.id not in ADMIN_IDS: return
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("➕ Add Course", "➖ Delete Course")
+    markup.add("📊 View Stats", "📝 Wishlist")
+    markup.add("📢 Broadcast", "❌ Exit Admin")
+    bot.send_message(message.chat.id, "👮 *Admin Panel Active*", reply_markup=markup)
+
+@bot.message_handler(func=lambda m: m.from_user.id in ADMIN_IDS)
+def admin_handler(m):
+    global COURSES
+    if m.text == "❌ Exit Admin":
+        ADMIN_STATE.pop(m.from_user.id, None)
+        bot.send_message(m.chat.id, "Admin Closed.", reply_markup=types.ReplyKeyboardRemove())
+    
+    elif m.text == "➕ Add Course":
+        ADMIN_STATE[m.from_user.id] = "ADD_NAME"
+        bot.send_message(m.chat.id, "Enter Course Name:")
+
+    elif m.text == "➖ Delete Course":
+        ADMIN_STATE[m.from_user.id] = "DELETE"
+        bot.send_message(m.chat.id, "Enter EXACT Course Name to delete:")
+
+    elif m.text == "📊 View Stats":
+        total, counter = get_today_stats()
+        text = f"📊 Today: {total} searches.\n" + "\n".join([f"• {k}: {v}" for k, v in counter.items()])
+        bot.send_message(m.chat.id, text if total > 0 else "No data.")
+
+    elif m.text == "📝 Wishlist":
+        wishlist = load_json(WISHLIST_FILE, [])
+        counts = Counter([i["query"] for i in wishlist])
+        text = "📝 *Wishlist:*\n" + "\n".join([f"• {k} ({v})" for k, v in counts.most_common(10)])
+        bot.send_message(m.chat.id, text if wishlist else "Empty.")
+
+    elif m.text == "📢 Broadcast":
+        ADMIN_STATE[m.from_user.id] = "BC"
+        bot.send_message(m.chat.id, "Enter broadcast message:")
+
+    else:
+        state = ADMIN_STATE.get(m.from_user.id)
+        if state == "ADD_NAME":
+            ADMIN_STATE[m.from_user.id] = {"name": m.text, "state": "ADD_LINK"}
+            bot.send_message(m.chat.id, f"Now enter link for: {m.text}")
+        elif isinstance(state, dict) and state.get("state") == "ADD_LINK":
+            COURSES.append({"name": state["name"], "link": m.text})
+            save_json(COURSES_FILE, COURSES)
+            bot.send_message(m.chat.id, "✅ Added successfully!")
+            ADMIN_STATE[m.from_user.id] = None
+        elif state == "DELETE":
+            COURSES = [c for c in COURSES if c["name"].lower() != m.text.lower().strip()]
+            save_json(COURSES_FILE, COURSES)
+            bot.send_message(m.chat.id, "🗑️ Deleted (if it existed).")
+            ADMIN_STATE[m.from_user.id] = None
+        elif state == "BC":
+            users = load_json(USERS_FILE, [])
+            for u in users:
+                try: bot.send_message(u, f"📢 *Update*\n\n{m.text}")
+                except: pass
+            bot.send_message(m.chat.id, "✅ Sent.")
+            ADMIN_STATE[m.from_user.id] = None
+
 if __name__ == "__main__":
     bot.infinity_polling()
+
