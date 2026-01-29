@@ -32,7 +32,6 @@ def save_user(user_id):
         users.append(user_id)
         save_json(USERS_FILE, users)
 
-# THE FULL CATALOG FROM YOUR PROVIDED DATA
 INITIAL_COURSES = [
     {"name": "🎬 EDIT TO EARN – Video Editing", "link": "https://t.me/EditToEarnCoursesbyAnkit"},
     {"name": "🔥 Jeet Selal Training Course", "link": "https://arolinks.com/TrainingCoursebyJeetSelal"},
@@ -55,7 +54,7 @@ INITIAL_COURSES = [
 COURSES = load_json(COURSES_FILE, INITIAL_COURSES)
 ADMIN_STATE = {}
 
-# ================= NEW: MAIN MENU KEYBOARD =================
+# ================= KEYBOARDS =================
 def main_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     btn1 = types.KeyboardButton('📚 All Courses')
@@ -93,8 +92,7 @@ def start(message):
     
     bot.send_message(
         message.chat.id, 
-        "📚 *Welcome to Ankit's Vault!*\n\n"
-        "Use the buttons below to navigate the bot quickly. Emojis make it easy! 😄", 
+        "📚 *Welcome to Ankit's Vault!*\n\nSearch for any course or browse the categories below.", 
         reply_markup=main_menu()
     )
 
@@ -106,22 +104,23 @@ def check_join(c):
     else:
         bot.answer_callback_query(c.id, "❌ Join the channel first!", show_alert=True)
 
-# --- Handling Main Menu Buttons ---
 @bot.message_handler(func=lambda m: m.text == '📚 All Courses')
 def btn_all_courses(message):
     show_all(message)
 
 @bot.message_handler(func=lambda m: m.text == '🔎 Search Course')
 def btn_search_prompt(message):
-    bot.send_message(message.chat.id, "🔎 **Searching...**\n\nPlease type the name of the course you want below:")
+    bot.send_message(message.chat.id, "🔍 **Ready to Search!**\n\nSend me the name of the course you want (e.g., 'CapCut' or 'Editing').")
 
 @bot.message_handler(func=lambda m: m.text == '⭐ VIP Access')
 def btn_vip(message):
-    bot.send_message(message.chat.id, "⭐ **VIP Premium Access**\n\nGet exclusive courses and fast links!\n\nContact @iWorld_Admin for pricing.")
+    bot.send_message(message.chat.id, "⭐ **VIP Premium Access**\n\nGet original, watermark-free courses!\n\nContact @CoursesByAnkit for details.")
 
 @bot.message_handler(func=lambda m: m.text == '📞 Support')
 def btn_support(message):
-    bot.send_message(message.chat.id, "📞 **Support & Help**\n\nIf you have issues or want to request a specific course, contact:\n👉 @iWorld_Admin")
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("💬 Message Admin", url="https://t.me/CoursesByAnkit"))
+    bot.send_message(message.chat.id, "📞 **Support & Requests**\n\nNeed a specific course? Found a broken link?\nClick below to message me directly!", reply_markup=markup)
 
 @bot.message_handler(commands=["courses"])
 def show_all(message):
@@ -131,54 +130,62 @@ def show_all(message):
         markup.add(types.InlineKeyboardButton(text=f"🎓 {c['name']}", callback_data=f"get_c_{c['name'][:20]}"))
     bot.send_message(message.chat.id, "📜 *Full Course List:*", reply_markup=markup)
 
-@bot.callback_query_handler(func=lambda c: c.data == "show_all_inline")
-def show_all_callback(c):
-    show_all(c.message)
-
 @bot.message_handler(func=lambda m: m.from_user.id not in ADMIN_IDS and not m.text.startswith("/"))
 def handle_search(m):
     if not is_member(m.from_user.id): return
     query = m.text.strip()
     
-    # Log stats for Admin
+    # 1. SEARCH ANIMATION (Typing status)
+    bot.send_chat_action(m.chat.id, 'typing')
+    status_msg = bot.send_message(m.chat.id, "🎬 *Searching the vault...*")
+    time.sleep(1.2) # Small delay to make animation feel real
+
+    # Log stats
     today = datetime.now().strftime("%Y-%m-%d")
     stats = load_json(f"stats_{today}.json", [])
     stats.append({"query": query})
     save_json(f"stats_{today}.json", stats)
 
-    status_msg = bot.send_message(m.chat.id, "🎬 *Searching for your course...*")
-    time.sleep(0.8)
-
+    # Search Logic
     match = next((c for c in COURSES if query.lower() in c["name"].lower()), None)
     
     if match:
-        bot.edit_message_text(f"✅ *Found!*\n\n🎉 *{match['name']}*\n🔗 {match['link']}", m.chat.id, status_msg.message_id)
+        bot.delete_message(m.chat.id, status_msg.message_id)
+        bot.send_message(m.chat.id, f"✅ *Found!*\n\n🎉 *{match['name']}*\n🔗 {match['link']}")
     else:
+        # 2. SUGGESTIONS (Difflib)
         all_names = [c["name"] for c in COURSES]
         suggestions = difflib.get_close_matches(query, all_names, n=3, cutoff=0.3)
+        
         if suggestions:
             markup = types.InlineKeyboardMarkup()
             for s in suggestions:
                 markup.add(types.InlineKeyboardButton(text=f"🎓 {s}", callback_data=f"get_c_{s[:20]}"))
             bot.edit_message_text("🔍 *Not found.* Did you mean one of these? 👇", m.chat.id, status_msg.message_id, reply_markup=markup)
         else:
-            # SAVE TO WISHLIST
+            # 3. RECOMMENDATIONS (When no results found)
             wishlist = load_json(WISHLIST_FILE, [])
             wishlist.append({"query": query, "date": today})
             save_json(WISHLIST_FILE, wishlist)
             
-            # COMING SOON MESSAGE
+            # Show top 3 random/popular courses as recommendations
+            rec_markup = types.InlineKeyboardMarkup()
+            rec_markup.add(types.InlineKeyboardButton("🎬 Editing Mastery", callback_data="get_c_EDIT TO EARN"))
+            rec_markup.add(types.InlineKeyboardButton("🤖 ChatGPT Course", callback_data="get_c_Master ChatGPT"))
+            
             text = (f"🚧 *Coming Soon!*\n\n"
-                    f"Added `{query}` to queue. 📝\n\n"
-                    f"🆘 *Urgent?* DM: @ytmn20")
-            bot.edit_message_text(text, m.chat.id, status_msg.message_id)
+                    f"I couldn't find `{query}`. It has been added to our wishlist! 📝\n\n"
+                    f"🔥 *Recommended for you:*")
+            bot.edit_message_text(text, m.chat.id, status_msg.message_id, reply_markup=rec_markup)
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("get_c_"))
 def handle_suggest(c):
     name_part = c.data.replace("get_c_", "").lower()
-    match = next((course for course in COURSES if course["name"].lower().startswith(name_part)), None)
+    # Search for the course that matches the button callback
+    match = next((course for course in COURSES if name_part in course["name"].lower()), None)
     if match:
-        bot.edit_message_text(f"🎉 *{match['name']}*\n🔗 {match['link']}", c.message.chat.id, c.message.message_id)
+        bot.send_message(c.message.chat.id, f"🎉 *{match['name']}*\n🔗 {match['link']}")
+        bot.answer_callback_query(c.id)
 
 # ================= ADMIN PANEL =================
 @bot.message_handler(commands=["admin"])
@@ -195,7 +202,7 @@ def admin_handler(m):
     global COURSES
     if m.text == "❌ Exit Admin":
         ADMIN_STATE.pop(m.from_user.id, None)
-        bot.send_message(m.chat.id, "Admin Closed. Menu Reset.", reply_markup=main_menu())
+        bot.send_message(m.chat.id, "Admin Closed.", reply_markup=main_menu())
     
     elif m.text == "➕ Add Course":
         ADMIN_STATE[m.from_user.id] = "ADD_NAME"
