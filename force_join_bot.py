@@ -32,7 +32,7 @@ def save_user(user_id):
         users.append(user_id)
         save_json(USERS_FILE, users)
 
-# Initial Course List from your provided text
+# THE FULL LIST FROM YOUR FILE
 INITIAL_COURSES = [
     {"name": "🎬 EDIT TO EARN – Video Editing", "link": "https://t.me/EditToEarnCoursesbyAnkit"},
     {"name": "🔥 Jeet Selal Training Course", "link": "https://arolinks.com/TrainingCoursebyJeetSelal"},
@@ -75,7 +75,7 @@ def get_today_stats():
     data = load_json(file, [])
     return len(data), Counter([d["query"] for d in data])
 
-# ================= AUTO-DM THREAD =================
+# ================= AUTO-DM THREAD (MIDNIGHT STATS) =================
 def daily_report_task():
     last_sent_date = ""
     while True:
@@ -96,7 +96,7 @@ def daily_report_task():
 
 threading.Thread(target=daily_report_task, daemon=True).start()
 
-# ================= COMMANDS =================
+# ================= USER COMMANDS =================
 @bot.message_handler(commands=["start"])
 def start(message):
     save_user(message.from_user.id)
@@ -106,7 +106,19 @@ def start(message):
         markup.add(types.InlineKeyboardButton("✅ I Joined", callback_data="check_join"))
         bot.send_message(message.chat.id, "🔐 *Access Restricted*\n\nPlease join our channel to use the bot.", reply_markup=markup)
         return
-    bot.send_message(message.chat.id, "📚 *Welcome to the Vault!*\n\nType a course name to search or click below.", reply_markup=types.ReplyKeyboardRemove())
+    
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("📜 View All Courses", callback_data="show_all_inline"))
+    
+    bot.send_message(
+        message.chat.id, 
+        "📚 *Welcome to Ankit's Vault!*\n\n"
+        "🔍 *How to find a course:*\n"
+        "1️⃣ Use /courses to see the full list.\n"
+        "2️⃣ Type a course name below to search.\n"
+        "3️⃣ Click the button below for options.", 
+        reply_markup=markup
+    )
 
 @bot.callback_query_handler(func=lambda c: c.data == "check_join")
 def check_join(c):
@@ -121,8 +133,12 @@ def show_all(message):
     if not is_member(message.from_user.id): return
     markup = types.InlineKeyboardMarkup(row_width=1)
     for c in COURSES:
-        markup.add(types.InlineKeyboardButton(text=f"🎓 {c['name']}", callback_data=f"get_course_{c['name'][:20]}"))
+        markup.add(types.InlineKeyboardButton(text=f"🎓 {c['name']}", callback_data=f"get_c_{c['name'][:20]}"))
     bot.send_message(message.chat.id, "📜 *Full Course List:*", reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda c: c.data == "show_all_inline")
+def show_all_callback(c):
+    show_all(c.message)
 
 # ================= SEARCH FLOW =================
 @bot.message_handler(func=lambda m: m.from_user.id not in ADMIN_IDS and not m.text.startswith("/"))
@@ -140,24 +156,27 @@ def handle_search(m):
     if match:
         bot.edit_message_text(f"✅ *Course Found!*\n\n🎉 *{match['name']}*\n🔗 {match['link']}", m.chat.id, status_msg.message_id)
     else:
-        # Suggestions
         all_names = [c["name"] for c in COURSES]
         suggestions = difflib.get_close_matches(query, all_names, n=3, cutoff=0.3)
         if suggestions:
             markup = types.InlineKeyboardMarkup()
             for s in suggestions:
-                markup.add(types.InlineKeyboardButton(text=f"🎓 {s}", callback_data=f"get_course_{s[:20]}"))
+                markup.add(types.InlineKeyboardButton(text=f"🎓 {s}", callback_data=f"get_c_{s[:20]}"))
             bot.edit_message_text("🔍 *Exact match not found.*\nDid you mean one of these? 👇", m.chat.id, status_msg.message_id, reply_markup=markup)
         else:
-            # Wishlist
+            # WISHLIST / COMING SOON
             wishlist = load_json(WISHLIST_FILE, [])
             wishlist.append({"query": query, "date": datetime.now().strftime("%Y-%m-%d")})
             save_json(WISHLIST_FILE, wishlist)
-            bot.edit_message_text(f"🚧 *Coming Soon!*\n\nSorry, `{query}` isn't available yet. I've added it to our upload queue! 📝\n\n🆘 *Urgent?* DM me: @ytmn20", m.chat.id, status_msg.message_id)
+            
+            text = (f"🚧 *Coming Soon!*\n\n"
+                    f"Sorry, `{query}` isn't available yet. I've added it to our upload queue! 📝\n\n"
+                    f"🆘 *Urgent?* DM me: @ytmn20")
+            bot.edit_message_text(text, m.chat.id, status_msg.message_id)
 
-@bot.callback_query_handler(func=lambda c: c.data.startswith("get_course_"))
+@bot.callback_query_handler(func=lambda c: c.data.startswith("get_c_"))
 def get_suggested(c):
-    name_part = c.data.replace("get_course_", "").lower()
+    name_part = c.data.replace("get_c_", "").lower()
     match = next((course for course in COURSES if course["name"].lower().startswith(name_part)), None)
     if match:
         bot.edit_message_text(f"🎉 *{match['name']}*\n🔗 {match['link']}", c.message.chat.id, c.message.message_id)
@@ -185,15 +204,16 @@ def admin_handler(m):
 
     elif m.text == "📝 Wishlist":
         wishlist = load_json(WISHLIST_FILE, [])
-        if not wishlist: bot.send_message(m.chat.id, "Wishlist is empty.")
+        if not wishlist: 
+            bot.send_message(m.chat.id, "Wishlist is empty.")
         else:
             counts = Counter([i["query"] for i in wishlist])
-            text = "📝 *Most Requested:* \n\n" + "\n".join([f"• `{k}` ({v})" for k, v in counts.most_common(10)])
+            text = "📝 *Most Requested (Coming Soon):* \n\n" + "\n".join([f"• `{k}` ({v})" for k, v in counts.most_common(10)])
             bot.send_message(m.chat.id, text)
 
     elif m.text == "📢 Broadcast":
         ADMIN_STATE[m.from_user.id] = "BC"
-        bot.send_message(m.chat.id, "Send the message you want to broadcast to all users.")
+        bot.send_message(m.chat.id, "💬 Send the message to broadcast to ALL users:")
 
     else:
         state = ADMIN_STATE.get(m.from_user.id)
@@ -202,7 +222,7 @@ def admin_handler(m):
             count = 0
             for u in users:
                 try: 
-                    bot.send_message(u, f"📢 *New Course Alert / Announcement*\n\n{m.text}")
+                    bot.send_message(u, f"📢 *New Announcement*\n\n{m.text}")
                     count += 1
                 except: pass
             bot.send_message(m.chat.id, f"✅ Broadcast sent to {count} users.")
@@ -210,7 +230,7 @@ def admin_handler(m):
 
 # ================= RUN =================
 if __name__ == "__main__":
-    print("🤖 Clearing old connections...")
-    bot.remove_webhook() # Force-clears conflicts
-    print("🚀 Bot is live and listening!")
+    print("🤖 Resetting Webhook...")
+    bot.remove_webhook()
+    print("🚀 Bot is live!")
     bot.infinity_polling(timeout=10, long_polling_timeout=5)
