@@ -32,7 +32,7 @@ def save_user(user_id):
         users.append(user_id)
         save_json(USERS_FILE, users)
 
-# THE FULL CATALOG FROM YOUR PROVIDED DATA
+# THE FULL CATALOG FROM YOUR PROVIDED DATA (1-16)
 INITIAL_COURSES = [
     {"name": "🎬 EDIT TO EARN – Video Editing", "link": "https://t.me/EditToEarnCoursesbyAnkit"},
     {"name": "🔥 Jeet Selal Training Course", "link": "https://arolinks.com/TrainingCoursebyJeetSelal"},
@@ -69,25 +69,6 @@ def get_today_stats():
     data = load_json(file, [])
     return len(data), Counter([d["query"] for d in data])
 
-# ================= AUTO-DM STATS =================
-def daily_report_task():
-    last_sent_date = ""
-    while True:
-        now = datetime.now()
-        current_date = now.strftime("%Y-%m-%d")
-        if now.hour == 23 and now.minute == 59 and last_sent_date != current_date:
-            total, counter = get_today_stats()
-            if total > 0:
-                report = f"📊 *Daily Search Summary*\nTotal: {total}\n"
-                for k, v in counter.most_common(5): report += f"• {k}: {v}\n"
-                for admin_id in ADMIN_IDS:
-                    try: bot.send_message(admin_id, report)
-                    except: pass
-            last_sent_date = current_date
-        time.sleep(30)
-
-threading.Thread(target=daily_report_task, daemon=True).start()
-
 # ================= USER SIDE =================
 @bot.message_handler(commands=["start"])
 def start(message):
@@ -98,7 +79,20 @@ def start(message):
         markup.add(types.InlineKeyboardButton("✅ I Joined", callback_data="check_join"))
         bot.send_message(message.chat.id, "🔐 *Access Restricted*\nPlease join our channel to use the bot.", reply_markup=markup)
         return
-    bot.send_message(message.chat.id, "📚 *Welcome!*\n\nType a course name to search or use /courses.")
+    
+    # Inline button for the main menu
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("📜 View All Courses", callback_data="show_all_inline"))
+
+    bot.send_message(
+        message.chat.id, 
+        "📚 *Welcome to Ankit's Vault!*\n\n"
+        "🔍 *How to find a course:*\n"
+        "1️⃣ Use /courses to see the full list.\n"
+        "2️⃣ Type a course name below to search.\n"
+        "3️⃣ Click the button below for options.", 
+        reply_markup=markup
+    )
 
 @bot.callback_query_handler(func=lambda c: c.data == "check_join")
 def check_join(c):
@@ -116,12 +110,16 @@ def show_all(message):
         markup.add(types.InlineKeyboardButton(text=f"🎓 {c['name']}", callback_data=f"get_c_{c['name'][:20]}"))
     bot.send_message(message.chat.id, "📜 *Full Course List:*", reply_markup=markup)
 
+@bot.callback_query_handler(func=lambda c: c.data == "show_all_inline")
+def show_all_callback(c):
+    show_all(c.message)
+
 @bot.message_handler(func=lambda m: m.from_user.id not in ADMIN_IDS and not m.text.startswith("/"))
 def handle_search(m):
     if not is_member(m.from_user.id): return
     query = m.text.strip()
     
-    # Log stats
+    # Log stats for Admin
     today = datetime.now().strftime("%Y-%m-%d")
     stats = load_json(f"stats_{today}.json", [])
     stats.append({"query": query})
