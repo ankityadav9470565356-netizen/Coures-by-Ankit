@@ -32,20 +32,28 @@ def save_user(user_id):
         users.append(user_id)
         save_json(USERS_FILE, users)
 
-# Initial list based on your file
+# THE FULL CATALOG FROM YOUR PROVIDED DATA
 INITIAL_COURSES = [
     {"name": "🎬 EDIT TO EARN – Video Editing", "link": "https://t.me/EditToEarnCoursesbyAnkit"},
     {"name": "🔥 Jeet Selal Training Course", "link": "https://arolinks.com/TrainingCoursebyJeetSelal"},
     {"name": "Stop Waiting Start Creating – Kavya Karnatac", "link": "https://t.me/+d4Tto-Nc2hw2ODFl"},
-    {"name": "🌟 Saqlain Khan – Script & Storytelling Mastery", "link": "https://arolinks.com/SaqlainkhanCourse"},
+    {"name": "🌟 Saqlain Khan – Script & Storytelling", "link": "https://arolinks.com/SaqlainkhanCourse"},
     {"name": "🚀 Detyo Bon Instagram Course", "link": "https://arolinks.com/DetyoBonInstagramCourse"},
     {"name": "🤖 Master ChatGPT – Dhruv Rathee Academy", "link": "https://arolinks.com/Vus4S"},
     {"name": "⏰ Master Time Management – Dhruv Rathee", "link": "https://arolinks.com/Vus4S"},
-    {"name": "🎥 CapCut Mastery: Beginner to Pro", "link": "https://t.me/CouresbyAnkit/447"}
+    {"name": "🔥 Attraction Decoded – Indian Men", "link": "https://arolinks.com/Vus4S"},
+    {"name": "🚀 YouTube Automation – Ammar Nisar", "link": "https://arolinks.com/BiM5K"},
+    {"name": "🎥 CapCut Mastery: Beginner to Pro", "link": "https://t.me/CouresbyAnkit/447"},
+    {"name": "💰 Take Charge of Your Money – Ankur Warikoo", "link": "https://t.me/SaqlainKhancoursebyAnkit"},
+    {"name": "🎞️ Hayden Hillier Video Editing Course", "link": "https://t.me/AttractionDecodedManLifestyle/28"},
+    {"name": "🎓 Time Management For Students - Warikoo", "link": "https://t.me/SaqlainKhancoursebyAnkit"},
+    {"name": "📈 Beat Youtube In 18 Days - Algrow", "link": "https://t.me/CouresbyAnkit/188"},
+    {"name": "🛡️ Iron Man Lifestyle - Attraction Decoded", "link": "https://t.me/AttractionDecodedManLifestyle"},
+    {"name": "🧠 Research & Scripting Mastery", "link": "https://arolinks.com/SaqlainkhanCourse"}
 ]
 
 COURSES = load_json(COURSES_FILE, INITIAL_COURSES)
-ADMIN_STATE = {} # To track if admin is adding or deleting
+ADMIN_STATE = {}
 
 # ================= HELPERS =================
 def is_member(user_id):
@@ -61,7 +69,7 @@ def get_today_stats():
     data = load_json(file, [])
     return len(data), Counter([d["query"] for d in data])
 
-# ================= AUTO-DM STATS THREAD =================
+# ================= AUTO-DM STATS =================
 def daily_report_task():
     last_sent_date = ""
     while True:
@@ -70,8 +78,8 @@ def daily_report_task():
         if now.hour == 23 and now.minute == 59 and last_sent_date != current_date:
             total, counter = get_today_stats()
             if total > 0:
-                report = f"📊 *Final Daily Report ({current_date})*\n\nTotal Searches: {total}\n"
-                for k, v in counter.most_common(5): report += f"• `{k}`: {v}\n"
+                report = f"📊 *Daily Search Summary*\nTotal: {total}\n"
+                for k, v in counter.most_common(5): report += f"• {k}: {v}\n"
                 for admin_id in ADMIN_IDS:
                     try: bot.send_message(admin_id, report)
                     except: pass
@@ -80,7 +88,7 @@ def daily_report_task():
 
 threading.Thread(target=daily_report_task, daemon=True).start()
 
-# ================= USER COMMANDS =================
+# ================= USER SIDE =================
 @bot.message_handler(commands=["start"])
 def start(message):
     save_user(message.from_user.id)
@@ -90,7 +98,7 @@ def start(message):
         markup.add(types.InlineKeyboardButton("✅ I Joined", callback_data="check_join"))
         bot.send_message(message.chat.id, "🔐 *Access Restricted*\nPlease join our channel to use the bot.", reply_markup=markup)
         return
-    bot.send_message(message.chat.id, "📚 *Welcome!*\nType a course name to search or use /courses.")
+    bot.send_message(message.chat.id, "📚 *Welcome!*\n\nType a course name to search or use /courses.")
 
 @bot.callback_query_handler(func=lambda c: c.data == "check_join")
 def check_join(c):
@@ -98,7 +106,7 @@ def check_join(c):
         bot.answer_callback_query(c.id, "✅ Access Granted!")
         start(c.message)
     else:
-        bot.answer_callback_query(c.id, "❌ Join first!", show_alert=True)
+        bot.answer_callback_query(c.id, "❌ Join the channel first!", show_alert=True)
 
 @bot.message_handler(commands=["courses"])
 def show_all(message):
@@ -108,20 +116,19 @@ def show_all(message):
         markup.add(types.InlineKeyboardButton(text=f"🎓 {c['name']}", callback_data=f"get_c_{c['name'][:20]}"))
     bot.send_message(message.chat.id, "📜 *Full Course List:*", reply_markup=markup)
 
-# ================= SEARCH FLOW =================
 @bot.message_handler(func=lambda m: m.from_user.id not in ADMIN_IDS and not m.text.startswith("/"))
 def handle_search(m):
     if not is_member(m.from_user.id): return
     query = m.text.strip()
     
-    # Log Stats
+    # Log stats
     today = datetime.now().strftime("%Y-%m-%d")
     stats = load_json(f"stats_{today}.json", [])
     stats.append({"query": query})
     save_json(f"stats_{today}.json", stats)
 
     status_msg = bot.send_message(m.chat.id, "🎬 *Searching for your course...*")
-    time.sleep(1)
+    time.sleep(0.8)
 
     match = next((c for c in COURSES if query.lower() in c["name"].lower()), None)
     
@@ -134,15 +141,21 @@ def handle_search(m):
             markup = types.InlineKeyboardMarkup()
             for s in suggestions:
                 markup.add(types.InlineKeyboardButton(text=f"🎓 {s}", callback_data=f"get_c_{s[:20]}"))
-            bot.edit_message_text("🔍 *Not found.* Did you mean? 👇", m.chat.id, status_msg.message_id, reply_markup=markup)
+            bot.edit_message_text("🔍 *Not found.* Did you mean one of these? 👇", m.chat.id, status_msg.message_id, reply_markup=markup)
         else:
+            # SAVE TO WISHLIST
             wishlist = load_json(WISHLIST_FILE, [])
             wishlist.append({"query": query, "date": today})
             save_json(WISHLIST_FILE, wishlist)
-            bot.edit_message_text(f"🚧 *Coming Soon!*\nAdded `{query}` to queue. 📝\n🆘 *Urgent?* DM: @ytmn20", m.chat.id, status_msg.message_id)
+            
+            # COMING SOON MESSAGE
+            text = (f"🚧 *Coming Soon!*\n\n"
+                    f"Added `{query}` to queue. 📝\n\n"
+                    f"🆘 *Urgent?* DM: @ytmn20")
+            bot.edit_message_text(text, m.chat.id, status_msg.message_id)
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("get_c_"))
-def handle_callback(c):
+def handle_suggest(c):
     name_part = c.data.replace("get_c_", "").lower()
     match = next((course for course in COURSES if course["name"].lower().startswith(name_part)), None)
     if match:
@@ -171,17 +184,17 @@ def admin_handler(m):
 
     elif m.text == "➖ Delete Course":
         ADMIN_STATE[m.from_user.id] = "DELETE"
-        bot.send_message(m.chat.id, "Enter EXACT Course Name to delete:")
+        bot.send_message(m.chat.id, "Enter EXACT Name to delete:")
 
     elif m.text == "📊 View Stats":
         total, counter = get_today_stats()
         text = f"📊 Today: {total} searches.\n" + "\n".join([f"• {k}: {v}" for k, v in counter.items()])
-        bot.send_message(m.chat.id, text if total > 0 else "No data.")
+        bot.send_message(m.chat.id, text if total > 0 else "No searches today.")
 
     elif m.text == "📝 Wishlist":
         wishlist = load_json(WISHLIST_FILE, [])
         counts = Counter([i["query"] for i in wishlist])
-        text = "📝 *Wishlist:*\n" + "\n".join([f"• {k} ({v})" for k, v in counts.most_common(10)])
+        text = "📝 *Most Requested:* \n\n" + "\n".join([f"• {k} ({v})" for k, v in counts.most_common(10)])
         bot.send_message(m.chat.id, text if wishlist else "Empty.")
 
     elif m.text == "📢 Broadcast":
@@ -196,19 +209,19 @@ def admin_handler(m):
         elif isinstance(state, dict) and state.get("state") == "ADD_LINK":
             COURSES.append({"name": state["name"], "link": m.text})
             save_json(COURSES_FILE, COURSES)
-            bot.send_message(m.chat.id, "✅ Added successfully!")
+            bot.send_message(m.chat.id, "✅ Course Added!")
             ADMIN_STATE[m.from_user.id] = None
         elif state == "DELETE":
             COURSES = [c for c in COURSES if c["name"].lower() != m.text.lower().strip()]
             save_json(COURSES_FILE, COURSES)
-            bot.send_message(m.chat.id, "🗑️ Deleted (if it existed).")
+            bot.send_message(m.chat.id, "🗑️ Deleted.")
             ADMIN_STATE[m.from_user.id] = None
         elif state == "BC":
             users = load_json(USERS_FILE, [])
             for u in users:
-                try: bot.send_message(u, f"📢 *Update*\n\n{m.text}")
+                try: bot.send_message(u, f"📢 *New Announcement*\n\n{m.text}")
                 except: pass
-            bot.send_message(m.chat.id, "✅ Sent.")
+            bot.send_message(m.chat.id, "✅ Broadcast Sent.")
             ADMIN_STATE[m.from_user.id] = None
 
 if __name__ == "__main__":
