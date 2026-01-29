@@ -92,7 +92,7 @@ def start(message):
     
     bot.send_message(
         message.chat.id, 
-        "📚 *Welcome to Ankit's Vault!*\n\nSearch for any course or browse the categories below.", 
+        "📚 *Welcome to Ankit's Vault!*\n\nSelect an option from the menu below:", 
         reply_markup=main_menu()
     )
 
@@ -120,25 +120,32 @@ def btn_vip(message):
 def btn_support(message):
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("💬 Message Admin", url="https://t.me/CoursesByAnkit"))
-    bot.send_message(message.chat.id, "📞 **Support & Requests**\n\nNeed a specific course? Found a broken link?\nClick below to message me directly!", reply_markup=markup)
+    bot.send_message(message.chat.id, "📞 **Support & Requests**\n\nClick below to message me directly!", reply_markup=markup)
 
 @bot.message_handler(commands=["courses"])
 def show_all(message):
     if not is_member(message.from_user.id): return
     markup = types.InlineKeyboardMarkup(row_width=1)
     for c in COURSES:
-        markup.add(types.InlineKeyboardButton(text=f"🎓 {c['name']}", callback_data=f"get_c_{c['name'][:20]}"))
+        # We use a unique ID or index to avoid long callback data errors
+        markup.add(types.InlineKeyboardButton(text=f"🎓 {c['name']}", callback_data=f"get_c_{COURSES.index(c)}"))
     bot.send_message(message.chat.id, "📜 *Full Course List:*", reply_markup=markup)
 
 @bot.message_handler(func=lambda m: m.from_user.id not in ADMIN_IDS and not m.text.startswith("/"))
 def handle_search(m):
     if not is_member(m.from_user.id): return
+    
+    # --- FIX: IGNORE MENU BUTTON TEXT ---
+    menu_buttons = ['📚 All Courses', '🔎 Search Course', '⭐ VIP Access', '📞 Support']
+    if m.text in menu_buttons:
+        return # Do nothing if the user just clicked a menu button
+
     query = m.text.strip()
     
-    # 1. SEARCH ANIMATION (Typing status)
+    # Search Animation
     bot.send_chat_action(m.chat.id, 'typing')
     status_msg = bot.send_message(m.chat.id, "🎬 *Searching the vault...*")
-    time.sleep(1.2) # Small delay to make animation feel real
+    time.sleep(1.0) 
 
     # Log stats
     today = datetime.now().strftime("%Y-%m-%d")
@@ -153,39 +160,40 @@ def handle_search(m):
         bot.delete_message(m.chat.id, status_msg.message_id)
         bot.send_message(m.chat.id, f"✅ *Found!*\n\n🎉 *{match['name']}*\n🔗 {match['link']}")
     else:
-        # 2. SUGGESTIONS (Difflib)
         all_names = [c["name"] for c in COURSES]
         suggestions = difflib.get_close_matches(query, all_names, n=3, cutoff=0.3)
         
         if suggestions:
             markup = types.InlineKeyboardMarkup()
             for s in suggestions:
-                markup.add(types.InlineKeyboardButton(text=f"🎓 {s}", callback_data=f"get_c_{s[:20]}"))
+                # Find the index of the suggestion to create the callback
+                idx = next((i for i, c in enumerate(COURSES) if c["name"] == s), None)
+                if idx is not None:
+                    markup.add(types.InlineKeyboardButton(text=f"🎓 {s}", callback_data=f"get_c_{idx}"))
             bot.edit_message_text("🔍 *Not found.* Did you mean one of these? 👇", m.chat.id, status_msg.message_id, reply_markup=markup)
         else:
-            # 3. RECOMMENDATIONS (When no results found)
             wishlist = load_json(WISHLIST_FILE, [])
             wishlist.append({"query": query, "date": today})
             save_json(WISHLIST_FILE, wishlist)
             
-            # Show top 3 random/popular courses as recommendations
             rec_markup = types.InlineKeyboardMarkup()
-            rec_markup.add(types.InlineKeyboardButton("🎬 Editing Mastery", callback_data="get_c_EDIT TO EARN"))
-            rec_markup.add(types.InlineKeyboardButton("🤖 ChatGPT Course", callback_data="get_c_Master ChatGPT"))
+            rec_markup.add(types.InlineKeyboardButton("🎬 Editing Mastery", callback_data="get_c_0")) # Index 0
+            rec_markup.add(types.InlineKeyboardButton("🤖 ChatGPT Course", callback_data="get_c_5")) # Index 5
             
             text = (f"🚧 *Coming Soon!*\n\n"
-                    f"I couldn't find `{query}`. It has been added to our wishlist! 📝\n\n"
+                    f"I couldn't find `{query}`. It's added to our wishlist! 📝\n\n"
                     f"🔥 *Recommended for you:*")
             bot.edit_message_text(text, m.chat.id, status_msg.message_id, reply_markup=rec_markup)
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("get_c_"))
 def handle_suggest(c):
-    name_part = c.data.replace("get_c_", "").lower()
-    # Search for the course that matches the button callback
-    match = next((course for course in COURSES if name_part in course["name"].lower()), None)
-    if match:
+    try:
+        idx = int(c.data.replace("get_c_", ""))
+        match = COURSES[idx]
         bot.send_message(c.message.chat.id, f"🎉 *{match['name']}*\n🔗 {match['link']}")
         bot.answer_callback_query(c.id)
+    except:
+        bot.answer_callback_query(c.id, "❌ Error retrieving course.")
 
 # ================= ADMIN PANEL =================
 @bot.message_handler(commands=["admin"])
@@ -207,26 +215,21 @@ def admin_handler(m):
     elif m.text == "➕ Add Course":
         ADMIN_STATE[m.from_user.id] = "ADD_NAME"
         bot.send_message(m.chat.id, "Enter Course Name:")
-
     elif m.text == "➖ Delete Course":
         ADMIN_STATE[m.from_user.id] = "DELETE"
         bot.send_message(m.chat.id, "Enter EXACT Name to delete:")
-
     elif m.text == "📊 View Stats":
         total, counter = get_today_stats()
         text = f"📊 Today: {total} searches.\n" + "\n".join([f"• {k}: {v}" for k, v in counter.items()])
         bot.send_message(m.chat.id, text if total > 0 else "No searches today.")
-
     elif m.text == "📝 Wishlist":
         wishlist = load_json(WISHLIST_FILE, [])
         counts = Counter([i["query"] for i in wishlist])
         text = "📝 *Most Requested:* \n\n" + "\n".join([f"• {k} ({v})" for k, v in counts.most_common(10)])
         bot.send_message(m.chat.id, text if wishlist else "Empty.")
-
     elif m.text == "📢 Broadcast":
         ADMIN_STATE[m.from_user.id] = "BC"
         bot.send_message(m.chat.id, "Enter broadcast message:")
-
     else:
         state = ADMIN_STATE.get(m.from_user.id)
         if state == "ADD_NAME":
