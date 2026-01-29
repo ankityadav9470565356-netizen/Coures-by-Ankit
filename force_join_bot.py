@@ -119,30 +119,29 @@ def btn_vip(message):
 @bot.message_handler(func=lambda m: m.text == '📞 Support')
 def btn_support(message):
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("💬 Message Admin", url="https://t.me/CoursesByAnkit"))
-    bot.send_message(message.chat.id, "📞 **Support & Requests**\n\nClick below to message me directly!", reply_markup=markup)
+    # Fixed support link
+    markup.add(types.InlineKeyboardButton("💬 Message Me", url="https://t.me/CoursesByAnkit"))
+    bot.send_message(message.chat.id, "📞 **Support & Requests**\n\nFound a broken link or want to request a course?\nClick below to message me directly!", reply_markup=markup)
 
 @bot.message_handler(commands=["courses"])
 def show_all(message):
     if not is_member(message.from_user.id): return
     markup = types.InlineKeyboardMarkup(row_width=1)
-    for c in COURSES:
-        # We use a unique ID or index to avoid long callback data errors
-        markup.add(types.InlineKeyboardButton(text=f"🎓 {c['name']}", callback_data=f"get_c_{COURSES.index(c)}"))
+    for i, c in enumerate(COURSES):
+        markup.add(types.InlineKeyboardButton(text=f"🎓 {c['name']}", callback_data=f"get_c_{i}"))
     bot.send_message(message.chat.id, "📜 *Full Course List:*", reply_markup=markup)
 
 @bot.message_handler(func=lambda m: m.from_user.id not in ADMIN_IDS and not m.text.startswith("/"))
 def handle_search(m):
     if not is_member(m.from_user.id): return
     
-    # --- FIX: IGNORE MENU BUTTON TEXT ---
-    menu_buttons = ['📚 All Courses', '🔎 Search Course', '⭐ VIP Access', '📞 Support']
-    if m.text in menu_buttons:
-        return # Do nothing if the user just clicked a menu button
+    # --- FIXED: IGNORE MENU BUTTONS TO PREVENT DOUBLE REPLIES ---
+    if m.text in ['📚 All Courses', '🔎 Search Course', '⭐ VIP Access', '📞 Support']:
+        return 
 
     query = m.text.strip()
     
-    # Search Animation
+    # --- ADDED: SEARCH ANIMATION ---
     bot.send_chat_action(m.chat.id, 'typing')
     status_msg = bot.send_message(m.chat.id, "🎬 *Searching the vault...*")
     time.sleep(1.0) 
@@ -160,25 +159,26 @@ def handle_search(m):
         bot.delete_message(m.chat.id, status_msg.message_id)
         bot.send_message(m.chat.id, f"✅ *Found!*\n\n🎉 *{match['name']}*\n🔗 {match['link']}")
     else:
+        # --- FIXED: PROPER SUGGESTIONS ---
         all_names = [c["name"] for c in COURSES]
         suggestions = difflib.get_close_matches(query, all_names, n=3, cutoff=0.3)
         
         if suggestions:
             markup = types.InlineKeyboardMarkup()
             for s in suggestions:
-                # Find the index of the suggestion to create the callback
                 idx = next((i for i, c in enumerate(COURSES) if c["name"] == s), None)
                 if idx is not None:
                     markup.add(types.InlineKeyboardButton(text=f"🎓 {s}", callback_data=f"get_c_{idx}"))
             bot.edit_message_text("🔍 *Not found.* Did you mean one of these? 👇", m.chat.id, status_msg.message_id, reply_markup=markup)
         else:
+            # --- ADDED: RECOMMENDATIONS IF NOT FOUND ---
             wishlist = load_json(WISHLIST_FILE, [])
             wishlist.append({"query": query, "date": today})
             save_json(WISHLIST_FILE, wishlist)
             
             rec_markup = types.InlineKeyboardMarkup()
-            rec_markup.add(types.InlineKeyboardButton("🎬 Editing Mastery", callback_data="get_c_0")) # Index 0
-            rec_markup.add(types.InlineKeyboardButton("🤖 ChatGPT Course", callback_data="get_c_5")) # Index 5
+            rec_markup.add(types.InlineKeyboardButton("🎬 Editing Mastery", callback_data="get_c_0"))
+            rec_markup.add(types.InlineKeyboardButton("🤖 ChatGPT Course", callback_data="get_c_5"))
             
             text = (f"🚧 *Coming Soon!*\n\n"
                     f"I couldn't find `{query}`. It's added to our wishlist! 📝\n\n"
