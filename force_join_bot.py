@@ -32,7 +32,7 @@ def save_user(user_id):
         users.append(user_id)
         save_json(USERS_FILE, users)
 
-# THE FULL CATALOG FROM YOUR PROVIDED DATA (1-16)
+# THE FULL CATALOG FROM YOUR PROVIDED DATA
 INITIAL_COURSES = [
     {"name": "🎬 EDIT TO EARN – Video Editing", "link": "https://t.me/EditToEarnCoursesbyAnkit"},
     {"name": "🔥 Jeet Selal Training Course", "link": "https://arolinks.com/TrainingCoursebyJeetSelal"},
@@ -54,6 +54,17 @@ INITIAL_COURSES = [
 
 COURSES = load_json(COURSES_FILE, INITIAL_COURSES)
 ADMIN_STATE = {}
+
+# ================= NEW: MAIN MENU KEYBOARD =================
+def main_menu():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    btn1 = types.KeyboardButton('📚 All Courses')
+    btn2 = types.KeyboardButton('🔎 Search Course')
+    btn3 = types.KeyboardButton('⭐ VIP Access')
+    btn4 = types.KeyboardButton('📞 Support')
+    markup.add(btn1, btn2)
+    markup.add(btn3, btn4)
+    return markup
 
 # ================= HELPERS =================
 def is_member(user_id):
@@ -80,18 +91,11 @@ def start(message):
         bot.send_message(message.chat.id, "🔐 *Access Restricted*\nPlease join our channel to use the bot.", reply_markup=markup)
         return
     
-    # Inline button for the main menu
-    markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("📜 View All Courses", callback_data="show_all_inline"))
-
     bot.send_message(
         message.chat.id, 
         "📚 *Welcome to Ankit's Vault!*\n\n"
-        "🔍 *How to find a course:*\n"
-        "1️⃣ Use /courses to see the full list.\n"
-        "2️⃣ Type a course name below to search.\n"
-        "3️⃣ Click the button below for options.", 
-        reply_markup=markup
+        "Use the buttons below to navigate the bot quickly. Emojis make it easy! 😄", 
+        reply_markup=main_menu()
     )
 
 @bot.callback_query_handler(func=lambda c: c.data == "check_join")
@@ -101,6 +105,23 @@ def check_join(c):
         start(c.message)
     else:
         bot.answer_callback_query(c.id, "❌ Join the channel first!", show_alert=True)
+
+# --- Handling Main Menu Buttons ---
+@bot.message_handler(func=lambda m: m.text == '📚 All Courses')
+def btn_all_courses(message):
+    show_all(message)
+
+@bot.message_handler(func=lambda m: m.text == '🔎 Search Course')
+def btn_search_prompt(message):
+    bot.send_message(message.chat.id, "🔎 **Searching...**\n\nPlease type the name of the course you want below:")
+
+@bot.message_handler(func=lambda m: m.text == '⭐ VIP Access')
+def btn_vip(message):
+    bot.send_message(message.chat.id, "⭐ **VIP Premium Access**\n\nGet exclusive courses and fast links!\n\nContact @iWorld_Admin for pricing.")
+
+@bot.message_handler(func=lambda m: m.text == '📞 Support')
+def btn_support(message):
+    bot.send_message(message.chat.id, "📞 **Support & Help**\n\nIf you have issues or want to request a specific course, contact:\n👉 @iWorld_Admin")
 
 @bot.message_handler(commands=["courses"])
 def show_all(message):
@@ -174,7 +195,7 @@ def admin_handler(m):
     global COURSES
     if m.text == "❌ Exit Admin":
         ADMIN_STATE.pop(m.from_user.id, None)
-        bot.send_message(m.chat.id, "Admin Closed.", reply_markup=types.ReplyKeyboardRemove())
+        bot.send_message(m.chat.id, "Admin Closed. Menu Reset.", reply_markup=main_menu())
     
     elif m.text == "➕ Add Course":
         ADMIN_STATE[m.from_user.id] = "ADD_NAME"
