@@ -6,7 +6,7 @@ from datetime import datetime
 from collections import Counter
 
 # ================= CONFIG =================
-API_TOKEN = "8561540975:AAELrKmHB4vcMe8Txnbp4F47jxqJhxfq3u8"
+API_TOKEN = "8561540975:AAEt3BAw87kFqIE8uLXRQpwTBRE9umdtTYs"
 CHANNEL_USERNAME = "@CouresbyAnkit"
 CHANNEL_LINK = "https://t.me/CouresbyAnkit"
 
@@ -132,3 +132,4 @@ def admin_input(m):
 
 if __name__ == "__main__":
     bot.infinity_polling()
+
