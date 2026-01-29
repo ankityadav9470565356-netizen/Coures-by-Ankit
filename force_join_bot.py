@@ -57,12 +57,8 @@ ADMIN_STATE = {}
 # ================= KEYBOARDS =================
 def main_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    btn1 = types.KeyboardButton('📚 All Courses')
-    btn2 = types.KeyboardButton('🔎 Search Course')
-    btn3 = types.KeyboardButton('⭐ VIP Access')
-    btn4 = types.KeyboardButton('📞 Support')
-    markup.add(btn1, btn2)
-    markup.add(btn3, btn4)
+    markup.add(types.KeyboardButton('📚 All Courses'), types.KeyboardButton('🔎 Search Course'))
+    markup.add(types.KeyboardButton('⭐ VIP Access'), types.KeyboardButton('📞 Support'))
     return markup
 
 # ================= HELPERS =================
@@ -72,14 +68,7 @@ def is_member(user_id):
         return status in ["member", "administrator", "creator"]
     except: return False
 
-def get_today_stats():
-    today = datetime.now().strftime("%Y-%m-%d")
-    file = f"stats_{today}.json"
-    if not os.path.exists(file): return 0, {}
-    data = load_json(file, [])
-    return len(data), Counter([d["query"] for d in data])
-
-# ================= USER SIDE =================
+# ================= USER HANDLERS =================
 @bot.message_handler(commands=["start"])
 def start(message):
     save_user(message.from_user.id)
@@ -90,11 +79,7 @@ def start(message):
         bot.send_message(message.chat.id, "🔐 *Access Restricted*\nPlease join our channel to use the bot.", reply_markup=markup)
         return
     
-    bot.send_message(
-        message.chat.id, 
-        "📚 *Welcome to Ankit's Vault!*\n\nSelect an option from the menu below:", 
-        reply_markup=main_menu()
-    )
+    bot.send_message(message.chat.id, "📚 *Welcome to Ankit's Vault!*", reply_markup=main_menu())
 
 @bot.callback_query_handler(func=lambda c: c.data == "check_join")
 def check_join(c):
@@ -104,53 +89,36 @@ def check_join(c):
     else:
         bot.answer_callback_query(c.id, "❌ Join the channel first!", show_alert=True)
 
-@bot.message_handler(func=lambda m: m.text == '📚 All Courses')
-def btn_all_courses(message):
-    show_all(message)
+# --- Button Logic (Placed ABOVE search to take priority) ---
+@bot.message_handler(func=lambda m: m.text in ['📚 All Courses', '🔎 Search Course', '⭐ VIP Access', '📞 Support'])
+def menu_button_handler(m):
+    if not is_member(m.from_user.id): return
+    
+    if m.text == '📚 All Courses':
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        for i, c in enumerate(COURSES[:15]): # Limit to first 15 for menu
+            markup.add(types.InlineKeyboardButton(text=f"🎓 {c['name']}", callback_data=f"get_c_{i}"))
+        bot.send_message(m.chat.id, "📜 *Top Courses:*", reply_markup=markup)
+        
+    elif m.text == '🔎 Search Course':
+        bot.send_message(m.chat.id, "🔍 **Ready to Search!**\n\nSend me the name of the course you want.")
+        
+    elif m.text == '⭐ VIP Access':
+        bot.send_message(m.chat.id, "⭐ **VIP Premium Access**\n\nContact @CoursesByAnkit for private links.")
+        
+    elif m.text == '📞 Support':
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("💬 Message Ankit", url="https://t.me/CoursesByAnkit"))
+        bot.send_message(m.chat.id, "📞 **Support Hub**\n\nClick below to chat with me!", reply_markup=markup)
 
-@bot.message_handler(func=lambda m: m.text == '🔎 Search Course')
-def btn_search_prompt(message):
-    bot.send_message(message.chat.id, "🔍 **Ready to Search!**\n\nSend me the name of the course you want (e.g., 'CapCut' or 'Editing').")
-
-@bot.message_handler(func=lambda m: m.text == '⭐ VIP Access')
-def btn_vip(message):
-    bot.send_message(message.chat.id, "⭐ **VIP Premium Access**\n\nGet original, watermark-free courses!\n\nContact @CoursesByAnkit for details.")
-
-@bot.message_handler(func=lambda m: m.text == '📞 Support')
-def btn_support(message):
-    markup = types.InlineKeyboardMarkup()
-    # Fixed support link
-    markup.add(types.InlineKeyboardButton("💬 Message Me", url="https://t.me/CoursesByAnkit"))
-    bot.send_message(message.chat.id, "📞 **Support & Requests**\n\nFound a broken link or want to request a course?\nClick below to message me directly!", reply_markup=markup)
-
-@bot.message_handler(commands=["courses"])
-def show_all(message):
-    if not is_member(message.from_user.id): return
-    markup = types.InlineKeyboardMarkup(row_width=1)
-    for i, c in enumerate(COURSES):
-        markup.add(types.InlineKeyboardButton(text=f"🎓 {c['name']}", callback_data=f"get_c_{i}"))
-    bot.send_message(message.chat.id, "📜 *Full Course List:*", reply_markup=markup)
-
+# --- Search Logic ---
 @bot.message_handler(func=lambda m: m.from_user.id not in ADMIN_IDS and not m.text.startswith("/"))
 def handle_search(m):
     if not is_member(m.from_user.id): return
     
-    # --- FIXED: IGNORE MENU BUTTONS TO PREVENT DOUBLE REPLIES ---
-    if m.text in ['📚 All Courses', '🔎 Search Course', '⭐ VIP Access', '📞 Support']:
-        return 
-
     query = m.text.strip()
-    
-    # --- ADDED: SEARCH ANIMATION ---
     bot.send_chat_action(m.chat.id, 'typing')
     status_msg = bot.send_message(m.chat.id, "🎬 *Searching the vault...*")
-    time.sleep(1.0) 
-
-    # Log stats
-    today = datetime.now().strftime("%Y-%m-%d")
-    stats = load_json(f"stats_{today}.json", [])
-    stats.append({"query": query})
-    save_json(f"stats_{today}.json", stats)
 
     # Search Logic
     match = next((c for c in COURSES if query.lower() in c["name"].lower()), None)
@@ -159,7 +127,6 @@ def handle_search(m):
         bot.delete_message(m.chat.id, status_msg.message_id)
         bot.send_message(m.chat.id, f"✅ *Found!*\n\n🎉 *{match['name']}*\n🔗 {match['link']}")
     else:
-        # --- FIXED: PROPER SUGGESTIONS ---
         all_names = [c["name"] for c in COURSES]
         suggestions = difflib.get_close_matches(query, all_names, n=3, cutoff=0.3)
         
@@ -171,19 +138,10 @@ def handle_search(m):
                     markup.add(types.InlineKeyboardButton(text=f"🎓 {s}", callback_data=f"get_c_{idx}"))
             bot.edit_message_text("🔍 *Not found.* Did you mean one of these? 👇", m.chat.id, status_msg.message_id, reply_markup=markup)
         else:
-            # --- ADDED: RECOMMENDATIONS IF NOT FOUND ---
-            wishlist = load_json(WISHLIST_FILE, [])
-            wishlist.append({"query": query, "date": today})
-            save_json(WISHLIST_FILE, wishlist)
-            
             rec_markup = types.InlineKeyboardMarkup()
             rec_markup.add(types.InlineKeyboardButton("🎬 Editing Mastery", callback_data="get_c_0"))
             rec_markup.add(types.InlineKeyboardButton("🤖 ChatGPT Course", callback_data="get_c_5"))
-            
-            text = (f"🚧 *Coming Soon!*\n\n"
-                    f"I couldn't find `{query}`. It's added to our wishlist! 📝\n\n"
-                    f"🔥 *Recommended for you:*")
-            bot.edit_message_text(text, m.chat.id, status_msg.message_id, reply_markup=rec_markup)
+            bot.edit_message_text(f"🚧 *Coming Soon!*\n\nI couldn't find `{query}`. Try these:", m.chat.id, status_msg.message_id, reply_markup=rec_markup)
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("get_c_"))
 def handle_suggest(c):
@@ -193,65 +151,17 @@ def handle_suggest(c):
         bot.send_message(c.message.chat.id, f"🎉 *{match['name']}*\n🔗 {match['link']}")
         bot.answer_callback_query(c.id)
     except:
-        bot.answer_callback_query(c.id, "❌ Error retrieving course.")
+        bot.answer_callback_query(c.id, "❌ Course link error.")
 
-# ================= ADMIN PANEL =================
+# ================= ADMIN =================
 @bot.message_handler(commands=["admin"])
 def admin_panel(message):
     if message.from_user.id not in ADMIN_IDS: return
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("➕ Add Course", "➖ Delete Course")
-    markup.add("📊 View Stats", "📝 Wishlist")
-    markup.add("📢 Broadcast", "❌ Exit Admin")
-    bot.send_message(message.chat.id, "👮 *Admin Panel Active*", reply_markup=markup)
-
-@bot.message_handler(func=lambda m: m.from_user.id in ADMIN_IDS)
-def admin_handler(m):
-    global COURSES
-    if m.text == "❌ Exit Admin":
-        ADMIN_STATE.pop(m.from_user.id, None)
-        bot.send_message(m.chat.id, "Admin Closed.", reply_markup=main_menu())
-    
-    elif m.text == "➕ Add Course":
-        ADMIN_STATE[m.from_user.id] = "ADD_NAME"
-        bot.send_message(m.chat.id, "Enter Course Name:")
-    elif m.text == "➖ Delete Course":
-        ADMIN_STATE[m.from_user.id] = "DELETE"
-        bot.send_message(m.chat.id, "Enter EXACT Name to delete:")
-    elif m.text == "📊 View Stats":
-        total, counter = get_today_stats()
-        text = f"📊 Today: {total} searches.\n" + "\n".join([f"• {k}: {v}" for k, v in counter.items()])
-        bot.send_message(m.chat.id, text if total > 0 else "No searches today.")
-    elif m.text == "📝 Wishlist":
-        wishlist = load_json(WISHLIST_FILE, [])
-        counts = Counter([i["query"] for i in wishlist])
-        text = "📝 *Most Requested:* \n\n" + "\n".join([f"• {k} ({v})" for k, v in counts.most_common(10)])
-        bot.send_message(m.chat.id, text if wishlist else "Empty.")
-    elif m.text == "📢 Broadcast":
-        ADMIN_STATE[m.from_user.id] = "BC"
-        bot.send_message(m.chat.id, "Enter broadcast message:")
-    else:
-        state = ADMIN_STATE.get(m.from_user.id)
-        if state == "ADD_NAME":
-            ADMIN_STATE[m.from_user.id] = {"name": m.text, "state": "ADD_LINK"}
-            bot.send_message(m.chat.id, f"Now enter link for: {m.text}")
-        elif isinstance(state, dict) and state.get("state") == "ADD_LINK":
-            COURSES.append({"name": state["name"], "link": m.text})
-            save_json(COURSES_FILE, COURSES)
-            bot.send_message(m.chat.id, "✅ Course Added!")
-            ADMIN_STATE[m.from_user.id] = None
-        elif state == "DELETE":
-            COURSES = [c for c in COURSES if c["name"].lower() != m.text.lower().strip()]
-            save_json(COURSES_FILE, COURSES)
-            bot.send_message(m.chat.id, "🗑️ Deleted.")
-            ADMIN_STATE[m.from_user.id] = None
-        elif state == "BC":
-            users = load_json(USERS_FILE, [])
-            for u in users:
-                try: bot.send_message(u, f"📢 *New Announcement*\n\n{m.text}")
-                except: pass
-            bot.send_message(m.chat.id, "✅ Broadcast Sent.")
-            ADMIN_STATE[m.from_user.id] = None
+    markup.add("📊 View Stats", "📢 Broadcast")
+    markup.add("❌ Exit Admin")
+    bot.send_message(message.chat.id, "👮 *Admin Panel*", reply_markup=markup)
 
 if __name__ == "__main__":
     bot.remove_webhook()
